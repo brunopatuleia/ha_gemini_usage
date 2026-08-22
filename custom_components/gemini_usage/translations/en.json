@@ -1,0 +1,52 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Gemini Usage Monitor — API Key",
+        "description": "Enter your Gemini API key. You can get one at {docs_url}",
+        "data": {
+          "api_key": "Gemini API Key"
+        }
+      },
+      "gcp": {
+        "title": "Gemini Usage Monitor — GCP (Optional)",
+        "description": "Optionally provide Google Cloud project details to enable Cloud Monitoring quota sensors. Leave blank to skip. Service account docs: {docs_url}",
+        "data": {
+          "gcp_project_id": "GCP Project ID",
+          "gcp_service_account_json": "Service Account JSON Key (paste full JSON)"
+        }
+      },
+      "local": {
+        "title": "Gemini Usage Monitor — Local Transcripts (Optional)",
+        "description": "Optionally specify the Antigravity brain directory for local token usage tracking. Auto-detected: {detected}",
+        "data": {
+          "local_db_path": "Antigravity Brain Directory Path"
+        }
+      }
+    },
+    "error": {
+      "invalid_api_key": "The API key is invalid or the Gemini API is unreachable.",
+      "invalid_sa_json": "The service account JSON is not valid JSON.",
+      "invalid_local_path": "The specified directory does not exist."
+    },
+    "abort": {
+      "already_configured": "Gemini Usage Monitor is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Gemini Usage Monitor — Options",
+        "data": {
+          "api_key": "Gemini API Key",
+          "gcp_project_id": "GCP Project ID",
+          "gcp_service_account_json": "Service Account JSON Key",
+          "local_db_path": "Antigravity Brain Directory Path",
+          "rate_limit_interval": "Rate-limit probe interval (seconds)",
+          "gcp_interval": "GCP Monitoring poll interval (seconds)",
+          "local_interval": "Local transcript scan interval (seconds)"
+        }
+      }
+    }
+  }
+}
