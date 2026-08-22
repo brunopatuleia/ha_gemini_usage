@@ -1,8 +1,23 @@
 """
 Constants for the Gemini Usage Monitor integration.
 
-This module is the single source of truth for every magic string, URL,
-default value, and sensor definition used across the integration.
+This module defines all constants, configuration keys, default polling
+intervals, Google API endpoints, and sensor schema definitions for the
+Gemini Usage Monitor Home Assistant integration.
+
+Architecture & Dynamic Entity Model:
+-----------------------------------
+1. **Core / Metadata Sensors**:
+   - `model_count`: Total number of models discovered via `GET /v1beta/models`.
+   - `api_status`: Live status of the Gemini API endpoint ('Online' / 'Offline').
+   - `api_latency`: Round-trip HTTP response time in milliseconds.
+   - `input_token_limit`: Maximum input context window per model (e.g. 1M / 2M tokens).
+   - `output_token_limit`: Maximum generated token budget per model.
+
+2. **Conditional Source Sensors**:
+   - **GCP Cloud Monitoring**: Created only when GCP credentials are configured.
+   - **Local Antigravity Logs**: Created only when a valid local path is provided.
+   - **Live Rate Limits**: Created if sliding-window rate limit headers are returned.
 """
 
 # ---------------------------------------------------------------------------
@@ -10,63 +25,83 @@ default value, and sensor definition used across the integration.
 # ---------------------------------------------------------------------------
 
 DOMAIN = "gemini_usage"
-"""Unique domain identifier for this integration (must be all lowercase)."""
+"""Unique domain identifier for this integration (must match custom_components directory name)."""
 
 PLATFORMS = ["sensor"]
-"""HA platforms that this integration registers entities on."""
+"""Home Assistant entity platforms supported by this integration."""
 
 # ---------------------------------------------------------------------------
-# Config-entry data / options keys
+# Config entry data / options keys
 # ---------------------------------------------------------------------------
 
 CONF_API_KEY = "api_key"
-"""Gemini API key — required; used for model-list retrieval and API health."""
+"""Gemini API key — required; obtained from Google AI Studio."""
 
 CONF_GCP_PROJECT_ID = "gcp_project_id"
-"""Google Cloud project ID — required only when GCP Cloud Monitoring is enabled."""
+"""Google Cloud Project ID — optional; required only for Cloud Monitoring."""
 
 CONF_GCP_SERVICE_ACCOUNT_JSON = "gcp_service_account_json"
-"""Full JSON content of a GCP service account key file."""
+"""GCP Service Account JSON key content — optional; requires roles/monitoring.viewer."""
 
 CONF_LOCAL_DB_PATH = "local_db_path"
-"""Path to the local Antigravity brain directory for transcript tracking."""
+"""Path to Antigravity brain directory — optional; for local transcript log tracking."""
 
 CONF_RATE_LIMIT_INTERVAL = "rate_limit_interval"
-"""Seconds between successive API health & rate-limit checks."""
+"""Poll interval in seconds for API health and live rate limit checks."""
 
 CONF_GCP_INTERVAL = "gcp_interval"
-"""Seconds between successive GCP Cloud Monitoring queries."""
+"""Poll interval in seconds for GCP Cloud Monitoring time-series."""
 
 CONF_LOCAL_INTERVAL = "local_interval"
-"""Seconds between successive local transcript scans."""
+"""Poll interval in seconds for local transcript log parsing."""
 
 # ---------------------------------------------------------------------------
-# Default poll intervals (seconds)
+# Default poll intervals (in seconds)
 # ---------------------------------------------------------------------------
 
-DEFAULT_RATE_LIMIT_INTERVAL = 60       # Live API health & probe
-DEFAULT_GCP_INTERVAL = 300             # Cloud Monitoring (5 min)
-DEFAULT_LOCAL_INTERVAL = 120           # Local transcript scan (2 min)
-DEFAULT_MODEL_LIST_INTERVAL = 3600     # Model list refresh (1 hour)
+DEFAULT_RATE_LIMIT_INTERVAL = 60
+"""Default interval for API health checks and latency measurements."""
+
+DEFAULT_GCP_INTERVAL = 300
+"""Default interval for GCP Cloud Monitoring (5 minutes to respect quota limits)."""
+
+DEFAULT_LOCAL_INTERVAL = 120
+"""Default interval for scanning local conversation transcripts (2 minutes)."""
+
+DEFAULT_MODEL_LIST_INTERVAL = 3600
+"""Default interval for refreshing the full model catalogue (1 hour)."""
 
 # ---------------------------------------------------------------------------
 # Gemini REST API endpoints
 # ---------------------------------------------------------------------------
 
 GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta"
+"""Base REST endpoint for Google Generative Language v1beta API."""
+
 GEMINI_MODELS_ENDPOINT = f"{GEMINI_API_BASE}/models"
+"""Endpoint to list all accessible Gemini models with their parameters and context limits."""
 
 # ---------------------------------------------------------------------------
 # GCP Cloud Monitoring API
 # ---------------------------------------------------------------------------
 
 GCP_MONITORING_BASE = "https://monitoring.googleapis.com/v3"
+"""Base endpoint for Google Cloud Monitoring REST API v3."""
+
 GEMINI_GCP_SERVICE = "generativelanguage.googleapis.com"
+"""Monitored resource service label for Google Gemini API."""
+
 GCP_MONITORING_SCOPES = ["https://www.googleapis.com/auth/monitoring.read"]
+"""OAuth2 scope for read-only access to Cloud Monitoring metrics."""
 
 METRIC_QUOTA_RATE_USAGE = "serviceruntime.googleapis.com/quota/rate/net_usage"
+"""Metric type for quota consumption rate."""
+
 METRIC_QUOTA_LIMIT = "serviceruntime.googleapis.com/quota/limit"
+"""Metric type for quota allocation ceiling."""
+
 METRIC_QUOTA_EXCEEDED = "serviceruntime.googleapis.com/quota/exceeded"
+"""Metric type for quota exhaustion count."""
 
 # ---------------------------------------------------------------------------
 # Local Antigravity paths
@@ -76,19 +111,21 @@ ANTIGRAVITY_BRAIN_PATH_TEMPLATES = [
     r"%USERPROFILE%\.gemini\antigravity\brain",
     r"%APPDATA%\.gemini\antigravity\brain",
 ]
+"""Windows environment templates for auto-detecting local Antigravity brain logs."""
 
 # ---------------------------------------------------------------------------
 # Model slug helpers
 # ---------------------------------------------------------------------------
 
 MODEL_SLUG_REPLACE = {"-": "_", ".": "_", "/": "_", ":": "_"}
+"""Character mapping to sanitize model names into Home Assistant-safe entity slugs."""
 
 # ---------------------------------------------------------------------------
 # Per-model sensor definitions
 # ---------------------------------------------------------------------------
 
 SENSOR_DEFS: dict[str, dict] = {
-    # Core model capacity & limits (always available from /models API)
+    # Core model capacity & limits (always populated from GET /v1beta/models)
     "input_token_limit": {
         "name": "Input Token Limit",
         "unit": "tokens",
@@ -101,7 +138,7 @@ SENSOR_DEFS: dict[str, dict] = {
         "icon": "mdi:arrow-down-bold-box-outline",
         "source": "model_metadata",
     },
-    # Live Rate-limit response headers (created if returned by API)
+    # Live Rate-limit response headers (registered if returned by API)
     "rpm_remaining": {
         "name": "Req/Min Remaining",
         "unit": "requests",
@@ -138,7 +175,7 @@ SENSOR_DEFS: dict[str, dict] = {
         "icon": "mdi:speedometer",
         "source": "api_headers",
     },
-    # GCP Cloud Monitoring (created only if GCP is configured)
+    # GCP Cloud Monitoring (registered only when GCP credentials are configured)
     "tokens_input_1h": {
         "name": "Input Tokens (1h)",
         "unit": "tokens",
@@ -157,7 +194,7 @@ SENSOR_DEFS: dict[str, dict] = {
         "icon": "mdi:percent",
         "source": "gcp",
     },
-    # Local Antigravity scan (created only if local path is configured)
+    # Local Antigravity transcript scan (registered only when local path exists)
     "tokens_today": {
         "name": "Tokens Today (Local)",
         "unit": "tokens",
@@ -195,7 +232,7 @@ AGGREGATE_SENSOR_DEFS: dict[str, dict] = {
         "icon": "mdi:timer-outline",
         "source": "api_core",
     },
-    # Local aggregates (only created if local tracking is active)
+    # Local aggregates (only created when local tracking is active)
     "total_tokens_today": {
         "name": "Total Tokens Today",
         "unit": "tokens",

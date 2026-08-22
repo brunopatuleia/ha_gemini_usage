@@ -1,5 +1,21 @@
 """
 Data update coordinator for Gemini Usage Monitor.
+
+This module handles asynchronous data polling, model catalog discovery,
+live API health checks, and optional metrics from Google Cloud Monitoring
+and local conversation transcript logs.
+
+Data Flow & Lifecycle:
+----------------------
+1. `_fetch_model_list`: Calls `GET /v1beta/models` with pagination support to build
+   the list of all models accessible to the user's API key. Extracts metadata such as
+   `inputTokenLimit` and `outputTokenLimit`.
+2. `_check_api_health_and_probe`: Runs lightweight requests to determine API availability
+   and measure round-trip HTTP latency in milliseconds.
+3. `_fetch_gcp_metrics` (Optional): Authenticates using a GCP Service Account to fetch
+   1-hour rolling quota time-series metrics from Google Cloud Monitoring.
+4. `_fetch_local_usage` (Optional): Scans local Antigravity transcript JSONL files to
+   compute daily and monthly token consumption tallies.
 """
 from __future__ import annotations
 
@@ -38,12 +54,18 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
+# Regular expressions for local transcript parsing
 _TOKEN_RE = re.compile(r"(\d[\d,]*)\s+tokens?", re.IGNORECASE)
 _MODEL_RE = re.compile(r"gemini[-/][\w.\-]+", re.IGNORECASE)
 
 
 def _model_slug(name: str) -> str:
-    """Convert a Gemini model name into a Home Assistant-safe entity-ID segment."""
+    """Convert a Gemini model name into a Home Assistant-safe entity-ID segment.
+
+    Examples:
+        'models/gemini-2.5-flash' -> 'gemini_2_5_flash'
+        'models/gemini-3.7-flash' -> 'gemini_3_7_flash'
+    """
     slug = name.lower()
     for ch, repl in {"-": "_", ".": "_", "/": "_", ":": "_"}.items():
         slug = slug.replace(ch, repl)
@@ -53,7 +75,7 @@ def _model_slug(name: str) -> str:
 
 
 class GeminiUsageCoordinator(DataUpdateCoordinator):
-    """Central coordinator that fetches Gemini usage and capacity data."""
+    """Central coordinator that manages data polling for Gemini Usage Monitor."""
 
     def __init__(
         self,
@@ -64,7 +86,7 @@ class GeminiUsageCoordinator(DataUpdateCoordinator):
         gcp_interval: int = DEFAULT_GCP_INTERVAL,
         local_interval: int = DEFAULT_LOCAL_INTERVAL,
     ) -> None:
-        """Initialise the coordinator."""
+        """Initialise coordinator with user settings and default intervals."""
         super().__init__(
             hass,
             _LOGGER,
@@ -81,12 +103,13 @@ class GeminiUsageCoordinator(DataUpdateCoordinator):
         self._gcp_interval = gcp_interval
         self._local_interval = local_interval
 
+        # Timestamps for tracking individual poll intervals
         self._last_api_health_fetch: float = 0.0
         self._last_gcp_fetch: float = 0.0
         self._last_local_fetch: float = 0.0
         self._last_model_list_fetch: float = 0.0
 
-        # State data
+        # State cache
         self._api_status: str = "Unknown"
         self._api_latency_ms: float | None = None
         self._models: list[dict] = []
@@ -97,19 +120,19 @@ class GeminiUsageCoordinator(DataUpdateCoordinator):
 
     @property
     def is_gcp_configured(self) -> bool:
-        """Return True if GCP credentials are configured."""
+        """Return True if GCP project ID and Service Account JSON are present."""
         return bool(self._gcp_project_id and self._gcp_sa_json_str)
 
     @property
     def is_local_configured(self) -> bool:
-        """Return True if local transcript path is configured and exists."""
+        """Return True if local transcript directory path is configured and exists."""
         return bool(self._local_path and os.path.isdir(self._local_path))
 
     async def _async_update_data(self) -> dict[str, Any]:
-        """Fetch data from active sources."""
+        """Fetch data from active sources respecting individual intervals."""
         now = time.monotonic()
 
-        # Always fetch/refresh model list periodically
+        # Refresh model catalogue hourly (or on initial start)
         if (
             not self._models
             or (now - self._last_model_list_fetch >= DEFAULT_MODEL_LIST_INTERVAL)
@@ -117,7 +140,7 @@ class GeminiUsageCoordinator(DataUpdateCoordinator):
             await self._fetch_model_list()
             self._last_model_list_fetch = now
 
-        # Run health check / probe on regular interval
+        # Execute scheduled polling tasks concurrently
         tasks = []
         if now - self._last_api_health_fetch >= self._rate_limit_interval:
             tasks.append(self._check_api_health_and_probe())
@@ -134,7 +157,7 @@ class GeminiUsageCoordinator(DataUpdateCoordinator):
         return self._build_data_dict()
 
     def _build_data_dict(self) -> dict[str, Any]:
-        """Merge all cached data into one dict."""
+        """Merge all cached data into a single payload for sensor entities."""
         return {
             "api_status": self._api_status,
             "api_latency": self._api_latency_ms,
@@ -146,7 +169,7 @@ class GeminiUsageCoordinator(DataUpdateCoordinator):
         }
 
     async def _fetch_model_list(self) -> None:
-        """Fetch all available Gemini models and extract metadata."""
+        """Fetch full model catalogue from Gemini API and extract context limits."""
         models = []
         page_token = ""
         url_base = f"{GEMINI_MODELS_ENDPOINT}?key={self._api_key}&pageSize=50"
@@ -188,14 +211,14 @@ class GeminiUsageCoordinator(DataUpdateCoordinator):
                     "supported_generation_methods": m.get("supportedGenerationMethods", []),
                 }
             self._model_metadata = meta_map
-            _LOGGER.debug("Fetched %d Gemini models", len(models))
+            _LOGGER.debug("Discovered %d Gemini models", len(models))
 
         except aiohttp.ClientError as exc:
             self._api_status = "Offline"
-            _LOGGER.warning("Error fetching model list: %s", exc)
+            _LOGGER.warning("Error connecting to Gemini API: %s", exc)
 
     async def _check_api_health_and_probe(self) -> None:
-        """Quick health check to measure latency and test primary model availability."""
+        """Measure API availability and response latency."""
         url = f"{GEMINI_MODELS_ENDPOINT}?key={self._api_key}&pageSize=1"
         start_time = time.monotonic()
         try:
@@ -211,12 +234,12 @@ class GeminiUsageCoordinator(DataUpdateCoordinator):
         except aiohttp.ClientError as exc:
             self._api_status = "Offline"
             self._api_latency_ms = None
-            _LOGGER.debug("API health check failed: %s", exc)
+            _LOGGER.debug("API health check connection error: %s", exc)
 
         self._last_api_health_fetch = time.monotonic()
 
     async def _fetch_gcp_metrics(self) -> None:
-        """Query GCP Cloud Monitoring for quota usage and limits."""
+        """Query Google Cloud Monitoring for quota usage and ceilings."""
         if not self.is_gcp_configured:
             return
 
@@ -224,7 +247,7 @@ class GeminiUsageCoordinator(DataUpdateCoordinator):
             sa_info = json.loads(self._gcp_sa_json_str)
             token = await self.hass.async_add_executor_job(self._get_gcp_access_token, sa_info)
         except Exception as exc:
-            _LOGGER.warning("GCP auth failed: %s", exc)
+            _LOGGER.warning("GCP authentication error: %s", exc)
             return
 
         now_iso = datetime.now(tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -265,12 +288,12 @@ class GeminiUsageCoordinator(DataUpdateCoordinator):
                                 entry["usage_1h"] = total_usage
                         self._gcp_data = new_data
         except aiohttp.ClientError as exc:
-            _LOGGER.debug("GCP fetch failed: %s", exc)
+            _LOGGER.debug("GCP metric query failed: %s", exc)
 
         self._last_gcp_fetch = time.monotonic()
 
     def _get_gcp_access_token(self, sa_info: dict) -> str:
-        """Obtain a GCP access token from service account JSON."""
+        """Obtain a short-lived GCP OAuth2 access token via service account credentials."""
         import google.auth.transport.requests as ga_requests
         import google.oauth2.service_account as sa_module
 
@@ -281,7 +304,7 @@ class GeminiUsageCoordinator(DataUpdateCoordinator):
         return credentials.token
 
     async def _fetch_local_usage(self) -> None:
-        """Scan local transcript JSONL files."""
+        """Scan local Antigravity conversation transcript files in executor thread."""
         if not self.is_local_configured:
             return
         result = await self.hass.async_add_executor_job(self._scan_transcripts)
@@ -289,7 +312,7 @@ class GeminiUsageCoordinator(DataUpdateCoordinator):
         self._last_local_fetch = time.monotonic()
 
     def _scan_transcripts(self) -> dict[str, dict]:
-        """Walk brain directory and tally tokens."""
+        """Walk brain directory and aggregate token counts by date and model."""
         brain_path = self._local_path
         if not brain_path or not os.path.isdir(brain_path):
             return {}
@@ -307,12 +330,12 @@ class GeminiUsageCoordinator(DataUpdateCoordinator):
             try:
                 self._parse_transcript(transcript, today, this_month, totals)
             except Exception as exc:
-                _LOGGER.debug("Transcript parse error: %s", exc)
+                _LOGGER.debug("Transcript parse error for %s: %s", transcript, exc)
 
         return totals
 
     def _parse_transcript(self, transcript_path: str, today: str, this_month: str, totals: dict) -> None:
-        """Parse one transcript file."""
+        """Parse individual transcript file for token metrics."""
         with open(transcript_path, "r", encoding="utf-8", errors="ignore") as fh:
             for raw_line in fh:
                 raw_line = raw_line.strip()

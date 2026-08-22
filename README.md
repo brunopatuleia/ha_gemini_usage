@@ -35,29 +35,35 @@ A comprehensive custom Home Assistant integration that monitors your **Google Ge
 
 ## 📊 Sensor Entities
 
-### 1. Cross-Model Aggregate Sensors (Always Available)
+### 1. Global & Aggregate Sensors (Always Available)
 
 | Entity ID | Friendly Name | Unit | Description |
 | :--- | :--- | :--- | :--- |
+| `sensor.gemini_api_status` | API Status | - | Live status of the Gemini API (`Online` / `Offline`) |
+| `sensor.gemini_api_latency` | API Latency | ms | Round-trip HTTP response latency |
 | `sensor.gemini_model_count` | Available Model Count | models | Total count of Gemini models currently accessible |
-| `sensor.gemini_total_tokens_today` | Total Tokens Today | tokens | Combined local token usage recorded today |
-| `sensor.gemini_total_tokens_this_month` | Total Tokens This Month | tokens | Combined local token usage recorded this calendar month |
+| `sensor.gemini_total_tokens_today` | Total Tokens Today | tokens | Combined local token usage recorded today *(if local logs enabled)* |
+| `sensor.gemini_total_tokens_this_month` | Total Tokens This Month | tokens | Combined local token usage recorded this month *(if local logs enabled)* |
 
-### 2. Per-Model Dynamic Sensors (Generated per Model, e.g. `gemini_2_0_flash`)
+### 2. Per-Model Capacity Sensors (Generated for all models, e.g. `gemini_2_5_flash`)
 
 | Entity ID Pattern | Friendly Name | Unit | Source |
 | :--- | :--- | :--- | :--- |
-| `sensor.gemini_{model}_rpm_remaining` | `{Model}` Req/Min Remaining | requests | Gemini API Headers |
-| `sensor.gemini_{model}_rpm_limit` | `{Model}` Req/Min Limit | requests | Gemini API Headers |
-| `sensor.gemini_{model}_tpm_remaining` | `{Model}` Tokens/Min Remaining | tokens | Gemini API Headers |
-| `sensor.gemini_{model}_tpm_limit` | `{Model}` Tokens/Min Limit | tokens | Gemini API Headers |
-| `sensor.gemini_{model}_rpd_remaining` | `{Model}` Req/Day Remaining | requests | Gemini API Headers |
-| `sensor.gemini_{model}_rpd_limit` | `{Model}` Req/Day Limit | requests | Gemini API Headers |
-| `sensor.gemini_{model}_tokens_input_1h` | `{Model}` Input Tokens (1h) | tokens | GCP Cloud Monitoring |
-| `sensor.gemini_{model}_tokens_output_1h` | `{Model}` Output Tokens (1h) | tokens | GCP Cloud Monitoring |
-| `sensor.gemini_{model}_quota_used_pct` | `{Model}` Quota Used % | % | GCP Cloud Monitoring |
-| `sensor.gemini_{model}_tokens_today` | `{Model}` Tokens Today (Local) | tokens | Local Transcripts |
-| `sensor.gemini_{model}_tokens_this_month` | `{Model}` Tokens This Month (Local) | tokens | Local Transcripts |
+| `sensor.gemini_{model}_input_token_limit` | `{Model}` Input Token Limit | tokens | Model Metadata (Context Window) |
+| `sensor.gemini_{model}_output_token_limit` | `{Model}` Output Token Limit | tokens | Model Metadata (Max Output) |
+
+### 3. Conditional Source Sensors (Created only when source is configured)
+
+| Entity ID Pattern | Friendly Name | Unit | Required Source |
+| :--- | :--- | :--- | :--- |
+| `sensor.gemini_{model}_rpm_remaining` | `{Model}` Req/Min Remaining | requests | API Response Headers |
+| `sensor.gemini_{model}_tpm_remaining` | `{Model}` Tokens/Min Remaining | tokens | API Response Headers |
+| `sensor.gemini_{model}_rpd_remaining` | `{Model}` Req/Day Remaining | requests | API Response Headers |
+| `sensor.gemini_{model}_tokens_input_1h` | `{Model}` Input Tokens (1h) | tokens | Google Cloud Monitoring |
+| `sensor.gemini_{model}_tokens_output_1h` | `{Model}` Output Tokens (1h) | tokens | Google Cloud Monitoring |
+| `sensor.gemini_{model}_quota_used_pct` | `{Model}` Quota Used % | % | Google Cloud Monitoring |
+| `sensor.gemini_{model}_tokens_today` | `{Model}` Tokens Today (Local) | tokens | Local Antigravity Transcripts |
+| `sensor.gemini_{model}_tokens_this_month` | `{Model}` Tokens This Month (Local) | tokens | Local Antigravity Transcripts |
 
 ---
 

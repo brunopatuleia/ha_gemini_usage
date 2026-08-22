@@ -1,5 +1,22 @@
 """
 Sensor platform for Gemini Usage Monitor.
+
+This module registers Home Assistant sensor entities based on the active
+configuration and data discovered by the GeminiUsageCoordinator.
+
+Registration Architecture:
+--------------------------
+- **Core Aggregate Entities**:
+  * `sensor.gemini_model_count`: Count of accessible models.
+  * `sensor.gemini_api_status`: 'Online' / 'Offline' status of the API endpoint.
+  * `sensor.gemini_api_latency`: Round-trip HTTP response time in ms.
+  * `sensor.gemini_total_tokens_today` / `this_month`: Created only when local tracking is active.
+
+- **Per-Model Entities**:
+  * `sensor.gemini_{model}_input_token_limit`: Max context window (e.g. 1,048,576 tokens).
+  * `sensor.gemini_{model}_output_token_limit`: Max generated tokens (e.g. 8,192 tokens).
+  * GCP quota sensors and local token sensors are only registered if their respective
+    data sources are enabled, preventing 'Unavailable' ghost entities.
 """
 from __future__ import annotations
 
@@ -28,17 +45,17 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up sensor entities for Gemini Usage Monitor."""
+    """Set up Gemini Usage sensor entities from a config entry."""
     coordinator: GeminiUsageCoordinator = hass.data[DOMAIN][entry.entry_id]
 
     entity_registry: dict[str, GeminiModelSensor] = {}
     aggregate_registry: dict[str, GeminiAggregateSensor] = {}
 
-    # Register aggregate / core sensors
+    # Register aggregate and core health sensors
     aggregate_entities: list[GeminiAggregateSensor] = []
     for sensor_key, sensor_def in AGGREGATE_SENSOR_DEFS.items():
         source = sensor_def.get("source", "")
-        # Only add local aggregates if local is configured
+        # Omit local aggregate sensors if local tracking is not configured
         if source == "local" and not coordinator.is_local_configured:
             continue
 
@@ -55,7 +72,7 @@ async def async_setup_entry(
 
     @callback
     def _handle_coordinator_update() -> None:
-        """Dynamically add model sensors based on active sources."""
+        """Dynamically create model sensors only for active and populated sources."""
         data = coordinator.data or {}
         model_metadata: dict = data.get("model_metadata", {})
         rate_limits: dict = data.get("rate_limits", {})
@@ -64,7 +81,7 @@ async def async_setup_entry(
 
         new_entities: list[GeminiModelSensor] = []
 
-        # 1. Core Model Metadata Sensors (input & output token limits)
+        # 1. Model capacity & limits (always available from model catalogue)
         for slug in model_metadata:
             for key in ("input_token_limit", "output_token_limit"):
                 if key in SENSOR_DEFS:
@@ -80,7 +97,7 @@ async def async_setup_entry(
                         entity_registry[entity_id_key] = sensor
                         new_entities.append(sensor)
 
-        # 2. Rate-limit header sensors (only if present in rate_limits data)
+        # 2. Live rate limit header sensors (registered if returned in response)
         for slug, r_data in rate_limits.items():
             for key in ("rpm_remaining", "rpm_limit", "tpm_remaining", "tpm_limit", "rpd_remaining", "rpd_limit"):
                 if key in r_data and r_data[key] is not None:
@@ -96,7 +113,7 @@ async def async_setup_entry(
                         entity_registry[entity_id_key] = sensor
                         new_entities.append(sensor)
 
-        # 3. GCP Sensors (only if GCP is configured)
+        # 3. GCP Cloud Monitoring sensors (registered only if GCP credentials provided)
         if coordinator.is_gcp_configured:
             for slug in gcp:
                 for key in ("tokens_input_1h", "tokens_output_1h", "quota_used_pct"):
@@ -113,7 +130,7 @@ async def async_setup_entry(
                             entity_registry[entity_id_key] = sensor
                             new_entities.append(sensor)
 
-        # 4. Local Transcript Sensors (only if Local is configured)
+        # 4. Local transcript sensors (registered only if local directory configured)
         if coordinator.is_local_configured:
             for slug in local:
                 for key in ("tokens_today", "tokens_this_month"):
@@ -139,7 +156,7 @@ async def async_setup_entry(
 
 
 def _device_info(entry: ConfigEntry) -> DeviceInfo:
-    """Device info grouping all Gemini entities."""
+    """Return unified DeviceInfo grouping all Gemini sensors."""
     return DeviceInfo(
         identifiers={(DOMAIN, entry.entry_id)},
         name="Gemini Usage Monitor",
@@ -151,7 +168,7 @@ def _device_info(entry: ConfigEntry) -> DeviceInfo:
 
 
 class GeminiModelSensor(CoordinatorEntity, SensorEntity):
-    """Represents a specific capacity/usage metric for a Gemini model."""
+    """Sensor entity representing a capacity or usage metric for an individual Gemini model."""
 
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_has_entity_name = True
@@ -164,7 +181,7 @@ class GeminiModelSensor(CoordinatorEntity, SensorEntity):
         sensor_key: str,
         sensor_def: dict,
     ) -> None:
-        """Initialise the sensor."""
+        """Initialise per-model sensor."""
         super().__init__(coordinator)
         self._model_slug = model_slug
         self._sensor_key = sensor_key
@@ -178,7 +195,7 @@ class GeminiModelSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def name(self) -> str:
-        """Return human-readable sensor name."""
+        """Return human-readable sensor label."""
         meta = (self.coordinator.data or {}).get("model_metadata", {}).get(self._model_slug, {})
         display_name = meta.get("display_name") or self._model_slug
         if display_name.startswith("models/"):
@@ -187,7 +204,7 @@ class GeminiModelSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def native_value(self) -> int | float | str | None:
-        """Return the sensor value."""
+        """Return current sensor value."""
         data = self.coordinator.data or {}
         source = self._sensor_def.get("source")
 
@@ -212,7 +229,7 @@ class GeminiModelSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        """Return supplementary attributes."""
+        """Return additional attributes such as model description and methods."""
         data = self.coordinator.data or {}
         attrs: dict[str, Any] = {"model_slug": self._model_slug}
 
@@ -224,12 +241,12 @@ class GeminiModelSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def available(self) -> bool:
-        """Entity availability."""
+        """Entity availability status."""
         return self.coordinator.last_update_success and self.native_value is not None
 
 
 class GeminiAggregateSensor(CoordinatorEntity, SensorEntity):
-    """Aggregate / Global status sensor."""
+    """Sensor entity representing an aggregate metric or overall service health."""
 
     _attr_has_entity_name = True
 
@@ -257,7 +274,7 @@ class GeminiAggregateSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def native_value(self) -> int | float | str | None:
-        """Return the aggregate reading."""
+        """Return aggregate value."""
         data = self.coordinator.data or {}
 
         if self._sensor_key == "model_count":
@@ -281,7 +298,7 @@ class GeminiAggregateSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        """Return attributes."""
+        """Return extra state attributes."""
         data = self.coordinator.data or {}
         attrs: dict[str, Any] = {}
 
