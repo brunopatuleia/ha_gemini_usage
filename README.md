@@ -1,5 +1,8 @@
 # Gemini Usage Monitor for Home Assistant (`ha_gemini_usage`)
 
+> [!NOTE]
+> ⚡ **Disclaimer / Disclosure**: This project was **vibe coded** with AI. Use at your own discretion, feel free to inspect the code, and contributions or PRs are welcome!
+
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/default)
 [![GitHub Release](https://img.shields.io/github/v/release/brunopatuleia/ha_gemini_usage)](https://github.com/brunopatuleia/ha_gemini_usage/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
