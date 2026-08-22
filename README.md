@@ -1,7 +1,7 @@
 # Gemini Usage Monitor for Home Assistant (`ha_gemini_usage`)
 
 > [!NOTE]
-> ⚡ **Disclaimer / Disclosure**: This project was **vibe coded** with AI. Use at your own discretion, feel free to inspect the code, and contributions or PRs are welcome!
+> ⚡ **Disclaimer / Disclosure**: This entire codebase was **100% vibe coded by AI** (Google Antigravity / Gemini & Claude). From architecture and sensor design to async coordinators, documentation, and tests — it was entirely written by the AI assistant. Use at your own discretion, inspect the code, and PRs / improvements are warmly welcomed!
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/default)
 [![GitHub Release](https://img.shields.io/github/v/release/brunopatuleia/ha_gemini_usage)](https://github.com/brunopatuleia/ha_gemini_usage/releases)
