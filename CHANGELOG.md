@@ -37,6 +37,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * **HA ClientSession & Modern Architecture**: Converted all manual `aiohttp.ClientSession` instances to `async_get_clientsession(hass)` and adopted `entry.runtime_data`.
 * **Persistent Connection Pooling**: Implemented `requests.Session` Keep-Alive pooling in `sync_antigravity_quota.py`, reducing daily socket churn by 98% (from 56,160 connections down to 1 persistent connection).
 * **Circuit Breaker on HA Outages**: Added fail-fast circuit breaker to the sync daemon, preventing 6.5-minute thread freezes and 2,340 log error lines/hour during Home Assistant restarts.
+* **Restored Countdown Timers**: Restored missing `_resets_in` sensors (`sensor.antigravity_*_resets_in`) across all four compute buckets, unfreezing live dashboard countdowns.
+* **Corrected Binary Sensor Entity IDs**: Formatted over-quota alert sensors cleanly as `binary_sensor.antigravity_*_over_quota_risk`.
+* **Watchdog Keepalive in Backoff**: Dispatched heartbeats every 10s during authentication backoff so `WatchdogSec=120s` never kills the daemon.
+* **Config Flow Argument Alignment**: Aligned `_validate_api_key(hass, api_key)` signature with caller in `config_flow.py`.
+* **Offline Fault Tolerance**: Antigravity quota monitoring remains online and functional even when Google Gemini developer API is unreachable or omitted.
+* **Polling Cadence Preservation**: Webhook push updates notify listeners without resetting the coordinator's periodic polling timer.
+* **Strict Webhook Schema Validation**: Rejected non-dictionary JSON payloads and removed unvalidated external dictionary passthroughs.
 * **Hardened Mathematical Edge Cases**:
   * Corrected offset-naive vs offset-aware ISO datetime parsing (`TypeError`).
   * Enforced minimum 15-minute / 2% observation threshold to prevent early-window 3-minute extrapolation spikes ($>3,000\%$).
@@ -48,7 +55,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   * Updated systemd service unit with `WatchdogSec=120s` and `Restart=on-failure`.
 
 ### 🍸 Disclosed
-* **100% Vibe Coded Project**: Prominently cited Google DeepMind Antigravity, Gemini 3.8 Flash, and Claude 3.5/3.7 Sonnet as the sole code authors (zero human-written code).
+* **100% Vibe Coded Project**: Prominently cited Google DeepMind Antigravity, Gemini 3.8 Flash, and Claude (Claude Opus 5.5 High, Claude 3.7 Sonnet, Claude 3.5 Sonnet) as the sole code authors (zero human-written code).
 
 ---
 

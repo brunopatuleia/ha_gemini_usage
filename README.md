@@ -7,7 +7,7 @@
 > 🤖 **AI Agents & Models Used**:
 > * **Google DeepMind Antigravity**: Autonomous agent platform, CLI orchestration, and local daemon integration.
 > * **Google Gemini**: Gemini 3.8 Flash (High), Gemini 2.5 Flash, and Gemini 2.5 Pro.
-> * **Anthropic Claude**: Claude 3.5 Sonnet & Claude 3.7 Sonnet (via Antigravity).
+> * **Anthropic Claude**: Claude Opus 5.5 (High), Claude 3.7 Sonnet, and Claude 3.5 Sonnet (via Antigravity).
 > 
 > Every single line of code — from architecture, Home Assistant async coordinators, daemon reverse-engineering, REST state synchronization, and systemd units to Lovelace cards and documentation — was **100% generated, debugged, and implemented by AI**. Use at your own discretion, inspect with curiosity, and community PRs / improvements are warmly welcomed!
 
@@ -82,7 +82,7 @@ python3 sync_antigravity_quota.py --once
 ```
 You should see:
 ```text
-[INFO] Successfully synced 4 Antigravity quota sensors to Home Assistant.
+[INFO] Successfully synced 36 Antigravity quota sensors to Home Assistant.
 ```
 
 #### Run permanently as a background service (Linux / systemd):
@@ -117,6 +117,7 @@ These entities dynamically adapt their state and label to your display preferenc
 | `sensor.antigravity_claude_gpt_weekly` | Claude & GPT — Weekly Quota Used | **Used %** | Weekly compute used by Claude Opus / Sonnet / GPT |
 | `sensor.antigravity_claude_gpt_5h` | Claude & GPT — Five Hour Quota Used | **Used %** | 5-Hour rolling compute used by Claude / GPT |
 | `sensor.antigravity_quota_status` | Antigravity Quota Status | `Online` | Connection status and sync heartbeat |
+| `sensor.antigravity_version` | Antigravity Integration Version | `1.1.0` | Installed release version and diagnostics |
 
 ---
 
