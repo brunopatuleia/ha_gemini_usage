@@ -1,0 +1,390 @@
+#!/usr/bin/env python3
+"""
+Antigravity Quota to Home Assistant Real-Time Sync Service.
+
+Queries the local Antigravity CLI/daemon for active compute quotas
+(Gemini Models and Claude & GPT models: Weekly & 5-Hour limits) and publishes
+live sensors to Home Assistant via its REST API.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import logging
+import os
+import subprocess
+import sys
+import time
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+import urllib.error
+import urllib.request
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+_LOGGER = logging.getLogger("antigravity_ha_sync")
+
+DEFAULT_INTERVAL = 60  # seconds
+ENV_PATHS = [
+    Path.cwd() / ".env",
+    Path(__file__).parent / ".env",
+    Path.home() / ".config" / "antigravity-ha-sync" / ".env",
+]
+
+
+def load_env_file() -> dict[str, str]:
+    """Parse key=value pairs from standard .env locations if present."""
+    env_vars = {}
+    for p in ENV_PATHS:
+        if p.is_file():
+            try:
+                with open(p, "r", encoding="utf-8") as fh:
+                    for line in fh:
+                        line = line.strip()
+                        if line and not line.startswith("#") and "=" in line:
+                            k, v = line.split("=", 1)
+                            env_vars[k.strip()] = v.strip().strip("'\"")
+            except Exception as exc:
+                _LOGGER.debug("Could not read %s: %s", p, exc)
+    return env_vars
+
+
+def get_config() -> tuple[str, str, int]:
+    """Resolve Home Assistant URL, Long-Lived Token, and sync interval."""
+    env_file_vars = load_env_file()
+
+    ha_url = (
+        os.environ.get("HA_URL")
+        or env_file_vars.get("HA_URL")
+        or "http://homeassistant.local:8123"
+    ).rstrip("/")
+
+    ha_token = (
+        os.environ.get("HA_TOKEN")
+        or env_file_vars.get("HA_TOKEN")
+        or ""
+    )
+
+    interval = int(
+        os.environ.get("SYNC_INTERVAL")
+        or env_file_vars.get("SYNC_INTERVAL")
+        or DEFAULT_INTERVAL
+    )
+
+    return ha_url, ha_token, interval
+
+
+def format_resets_in(reset_time_iso: str) -> str:
+    """Compute human-friendly relative reset duration like '2d 19h' or '3h 22m'."""
+    try:
+        # Expected format: "2026-10-16T17:22:03Z"
+        target = datetime.fromisoformat(reset_time_iso.replace("Z", "+00:00"))
+        now = datetime.now(timezone.utc)
+        diff = target - now
+        total_seconds = int(diff.total_seconds())
+
+        if total_seconds <= 0:
+            return "Now"
+
+        days = total_seconds // 86400
+        hours = (total_seconds % 86400) // 3600
+        minutes = (total_seconds % 3600) // 60
+
+        if days > 0:
+            return f"{days}d {hours}h"
+        if hours > 0:
+            return f"{hours}h {minutes}m"
+        return f"{minutes}m"
+    except Exception:
+        return "Unknown"
+
+
+def fetch_quota_from_agy() -> dict[str, Any] | None:
+    """Run agy --print '/quota' --output-format json and return the parsed JSON payload."""
+    try:
+        cmd = ["agy", "--print", "/quota", "--output-format", "json"]
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=True,
+        )
+        data = json.loads(result.stdout)
+        return data
+    except subprocess.CalledProcessError as err:
+        _LOGGER.error("agy exited with error (code %d): %s", err.returncode, err.stderr.strip())
+    except subprocess.TimeoutExpired:
+        _LOGGER.error("Timeout fetching quota from agy CLI (>15s)")
+    except json.JSONDecodeError as err:
+        _LOGGER.error("Failed to decode JSON from agy output: %s", err)
+    except Exception as exc:
+        _LOGGER.error("Unexpected error querying agy: %s", exc)
+    return None
+
+
+def post_state_to_ha(
+    ha_url: str,
+    ha_token: str,
+    entity_id: str,
+    state: str | int | float,
+    attributes: dict[str, Any],
+) -> bool:
+    """POST an entity state update to Home Assistant REST API."""
+    url = f"{ha_url}/api/states/{entity_id}"
+    payload = json.dumps({"state": str(state), "attributes": attributes}).encode("utf-8")
+    headers = {
+        "Authorization": f"Bearer {ha_token}",
+        "Content-Type": "application/json",
+    }
+    req = urllib.request.Request(url, data=payload, headers=headers, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            return resp.status in (200, 201)
+    except urllib.error.HTTPError as exc:
+        _LOGGER.error("HTTP error %d posting to %s: %s", exc.code, entity_id, exc.read().decode())
+    except Exception as exc:
+        _LOGGER.error("Failed to post to HA %s: %s", entity_id, exc)
+    return False
+
+
+def delete_entity_from_ha(ha_url: str, ha_token: str, entity_id: str) -> bool:
+    """Remove an entity from Home Assistant states via DELETE /api/states/<entity_id>."""
+    url = f"{ha_url}/api/states/{entity_id}"
+    headers = {"Authorization": f"Bearer {ha_token}"}
+    req = urllib.request.Request(url, headers=headers, method="DELETE")
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            return resp.status in (200, 201, 204)
+    except Exception as exc:
+        _LOGGER.debug("Could not delete %s: %s", entity_id, exc)
+        return False
+
+
+def cleanup_vibe_coded_ghost_sensors(ha_url: str, ha_token: str) -> int:
+    """Find and clean up unavailable ghost sensors from the old vibe-coded integration."""
+    url = f"{ha_url}/api/states"
+    headers = {"Authorization": f"Bearer {ha_token}"}
+    req = urllib.request.Request(url, headers=headers)
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            states = json.loads(resp.read().decode())
+    except Exception as exc:
+        _LOGGER.error("Failed to fetch states from HA for cleanup: %s", exc)
+        return 0
+
+    to_delete = [
+        s["entity_id"]
+        for s in states
+        if (
+            s["entity_id"].startswith("sensor.gemini_usage_monitor_")
+            or s["entity_id"].startswith("sensor.server_room_gemini_usage_monitor_")
+        )
+        and s.get("state") in ("unavailable", "unknown")
+    ]
+
+    count = 0
+    for entity_id in to_delete:
+        if delete_entity_from_ha(ha_url, ha_token, entity_id):
+            count += 1
+            _LOGGER.info("Deleted stale ghost entity: %s", entity_id)
+
+    return count
+
+
+def sync_once(ha_url: str, ha_token: str) -> bool:
+    """Fetch current quota and publish all sensors to Home Assistant."""
+    payload = fetch_quota_from_agy()
+    if not payload:
+        post_state_to_ha(
+            ha_url,
+            ha_token,
+            "sensor.antigravity_quota_status",
+            "Offline",
+            {
+                "friendly_name": "Antigravity Quota Status",
+                "icon": "mdi:cloud-alert",
+                "last_error": "Failed to query agy CLI",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            },
+        )
+        return False
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    groups = payload.get("command", {}).get("data", {}).get("groups", [])
+    if not groups:
+        _LOGGER.warning("No quota groups found in agy response")
+        return False
+
+    # Bucket configuration mappings
+    bucket_definitions = {
+        "gemini-weekly": {
+            "base_id": "sensor.antigravity_gemini_weekly",
+            "name_used": "Gemini Models — Weekly Quota Used",
+            "name_remaining": "Gemini Models — Weekly Limit Remaining",
+            "icon": "mdi:google",
+            "group": "Gemini Models",
+        },
+        "gemini-5h": {
+            "base_id": "sensor.antigravity_gemini_5h",
+            "name_used": "Gemini Models — Five Hour Quota Used",
+            "name_remaining": "Gemini Models — Five Hour Limit Remaining",
+            "icon": "mdi:clock-fast",
+            "group": "Gemini Models",
+        },
+        "3p-weekly": {
+            "base_id": "sensor.antigravity_claude_gpt_weekly",
+            "name_used": "Claude & GPT — Weekly Quota Used",
+            "name_remaining": "Claude & GPT — Weekly Limit Remaining",
+            "icon": "mdi:creation-outline",
+            "group": "Claude and GPT models",
+        },
+        "3p-5h": {
+            "base_id": "sensor.antigravity_claude_gpt_5h",
+            "name_used": "Claude & GPT — Five Hour Quota Used",
+            "name_remaining": "Claude & GPT — Five Hour Limit Remaining",
+            "icon": "mdi:clock-fast",
+            "group": "Claude and GPT models",
+        },
+    }
+
+    synced_count = 0
+    for group in groups:
+        group_name = group.get("name", "")
+        group_desc = group.get("description", "")
+        for bucket in group.get("buckets", []):
+            bucket_id = bucket.get("id", "")
+            cfg = bucket_definitions.get(bucket_id)
+            if not cfg:
+                continue
+
+            rem_frac = max(0.0, min(1.0, float(bucket.get("remaining_fraction", 0.0))))
+            used_frac = max(0.0, min(1.0, 1.0 - rem_frac))
+
+            rem_pct = round(rem_frac * 100.0, 1)
+            used_pct = round(used_frac * 100.0, 1)
+
+            int_rem_pct = round(rem_frac * 100.0)
+            int_used_pct = round(used_frac * 100.0)
+
+            reset_time = bucket.get("reset_time", "")
+            resets_in = format_resets_in(reset_time)
+            desc = bucket.get("description") or group_desc
+
+            common_attrs = {
+                "unit_of_measurement": "%",
+                "state_class": "measurement",
+                "used_pct": used_pct,
+                "remaining_pct": rem_pct,
+                "used_fraction": round(used_frac, 4),
+                "remaining_fraction": round(rem_frac, 4),
+                "reset_time": reset_time,
+                "resets_in": resets_in,
+                "window": bucket.get("window", ""),
+                "group": group_name,
+                "description": desc,
+                "last_synced": now_iso,
+            }
+
+            base_id = cfg["base_id"]
+
+            # 1. Primary sensor defaults to Used % (user preference)
+            attrs_primary = {**common_attrs, "friendly_name": cfg["name_used"], "icon": cfg["icon"]}
+            if post_state_to_ha(ha_url, ha_token, base_id, int_used_pct, attrs_primary):
+                synced_count += 1
+                _LOGGER.debug("Synced primary %s -> %d%% used (%s)", base_id, int_used_pct, resets_in)
+
+            # 2. Explicit _used sensor
+            used_id = f"{base_id}_used"
+            attrs_used = {**common_attrs, "friendly_name": cfg["name_used"], "icon": cfg["icon"]}
+            post_state_to_ha(ha_url, ha_token, used_id, int_used_pct, attrs_used)
+
+            # 3. Explicit _remaining sensor
+            rem_id = f"{base_id}_remaining"
+            attrs_rem = {**common_attrs, "friendly_name": cfg["name_remaining"], "icon": cfg["icon"]}
+            post_state_to_ha(ha_url, ha_token, rem_id, int_rem_pct, attrs_rem)
+
+            # 4. Explicit _resets_in countdown sensor (e.g. '2d 19h')
+            resets_id = f"{base_id}_resets_in"
+            attrs_resets = {
+                "friendly_name": f"{cfg['name_used']} — Reset In",
+                "icon": "mdi:timer-sand",
+                "reset_time": reset_time,
+                "group": group_name,
+                "window": bucket.get("window", ""),
+                "last_synced": now_iso,
+            }
+            post_state_to_ha(ha_url, ha_token, resets_id, resets_in, attrs_resets)
+
+    # Sync overarching health / status sensor
+    post_state_to_ha(
+        ha_url,
+        ha_token,
+        "sensor.antigravity_quota_status",
+        "Online",
+        {
+            "friendly_name": "Antigravity Quota Status",
+            "icon": "mdi:cloud-check",
+            "synced_sensors": synced_count,
+            "last_synced": now_iso,
+            "version": "1.0.0",
+        },
+    )
+
+    _LOGGER.info("Successfully synced %d Antigravity quota sensors to Home Assistant.", synced_count)
+    return synced_count > 0
+
+
+def main() -> None:
+    """CLI entrypoint."""
+    parser = argparse.ArgumentParser(description="Sync Antigravity Quotas to Home Assistant")
+    parser.add_argument("--ha-url", help="Home Assistant base URL")
+    parser.add_argument("--ha-token", help="Home Assistant Long-Lived Access Token")
+    parser.add_argument("--interval", type=int, help="Sync interval in seconds (default 60)")
+    parser.add_argument("--once", action="store_true", help="Run sync once and exit")
+    parser.add_argument(
+        "--cleanup-ghosts",
+        action="store_true",
+        help="Purge unavailable sensors left over from old vibe-coded sessions",
+    )
+    args = parser.parse_args()
+
+    default_url, default_token, default_interval = get_config()
+    ha_url = (args.ha_url or default_url).rstrip("/")
+    ha_token = args.ha_token or default_token
+    interval = args.interval or default_interval
+
+    if not ha_token:
+        _LOGGER.error("Missing HA_TOKEN. Provide via --ha-token, env, or .env file.")
+        sys.exit(1)
+
+    if args.cleanup_ghosts:
+        _LOGGER.info("Cleaning up unavailable ghost entities from previous sessions...")
+        deleted = cleanup_vibe_coded_ghost_sensors(ha_url, ha_token)
+        _LOGGER.info("Cleanup complete. Removed %d ghost entities.", deleted)
+
+    if args.once:
+        success = sync_once(ha_url, ha_token)
+        sys.exit(0 if success else 1)
+
+    _LOGGER.info(
+        "Starting Antigravity -> Home Assistant quota sync daemon (interval: %ds, target: %s)",
+        interval,
+        ha_url,
+    )
+
+    while True:
+        try:
+            sync_once(ha_url, ha_token)
+        except Exception as exc:
+            _LOGGER.error("Error during sync cycle: %s", exc)
+        time.sleep(interval)
+
+
+if __name__ == "__main__":
+    main()

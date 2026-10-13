@@ -1,0 +1,15 @@
+[Unit]
+Description=Antigravity Quota to Home Assistant Real-Time Sync Service
+After=network.target
+
+[Service]
+Type=simple
+# Update the path below to match where you cloned the repository
+ExecStart=/usr/bin/python3 %h/ha_gemini_usage/sync_antigravity_quota.py --interval 60
+Restart=always
+RestartSec=15s
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

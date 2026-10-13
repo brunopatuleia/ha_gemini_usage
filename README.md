@@ -1,145 +1,245 @@
-# Gemini Usage Monitor for Home Assistant (`ha_gemini_usage`)
+# Antigravity & Gemini Usage Monitor for Home Assistant 🚀
 
-> [!NOTE]
-> 💡 **Concept & Idea**: [@brunopatuleia](https://github.com/brunopatuleia)  
-> ⚡ **Code & Implementation**: **100% vibe coded by AI** (Google Antigravity / Gemini & Claude). From architecture and dynamic multi-model sensor design to async coordinators, documentation, and tests — entirely written by the AI assistant. Use at your own discretion, inspect the code, and PRs / improvements are warmly welcomed!
+> [!IMPORTANT]
+> 🍸 **100% Vibe Coded — Zero Human-Written Code**:  
+> The human author ([@brunopatuleia](https://github.com/brunopatuleia)) conceived the idea, directed the design, and tested the integration while relaxing and having drinks — but **did not write a single line of code**.
+> 
+> 🤖 **AI Agents & Models Used**:
+> * **Google DeepMind Antigravity**: Autonomous agent platform, CLI orchestration, and local daemon integration.
+> * **Google Gemini**: Gemini 3.8 Flash (High), Gemini 2.5 Flash, and Gemini 2.5 Pro.
+> * **Anthropic Claude**: Claude 3.5 Sonnet & Claude 3.7 Sonnet (via Antigravity).
+> 
+> Every single line of code — from architecture, Home Assistant async coordinators, daemon reverse-engineering, REST state synchronization, and systemd units to Lovelace cards and documentation — was **100% generated, debugged, and implemented by AI**. Use at your own discretion, inspect with curiosity, and community PRs / improvements are warmly welcomed!
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/default)
 [![GitHub Release](https://img.shields.io/github/v/release/brunopatuleia/ha_gemini_usage)](https://github.com/brunopatuleia/ha_gemini_usage/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A comprehensive custom Home Assistant integration that monitors your **Google Gemini API** quota, rate limits, and token usage in real-time — across **all available models**, discovered dynamically.
+<p align="center">
+  <img src="images/dashboard.png" alt="Antigravity Home Assistant Dashboard" width="850">
+</p>
+
+A real-time monitor for **Google Antigravity** compute limits and **Google Gemini API** quotas in Home Assistant.
 
 ---
 
-## 🌟 Key Features
+## 🌟 What Does This Monitor?
 
-* 🤖 **Dynamic Model Discovery**: Automatically discovers all models accessible to your API key (via `GET /v1beta/models`), refreshing hourly and generating per-model sensor entities on the fly.
-* ⚡ **Live Rate-Limit Header Probing**: Probes models using a lightweight, minimal-token request to retrieve active sliding-window counters:
-  * Requests per minute (RPM) remaining & limit
-  * Tokens per minute (TPM) remaining & limit
-  * Requests per day (RPD) remaining & limit
-* ☁️ **Google Cloud Monitoring Quota Integration** *(Optional)*: Uses GCP Service Account credentials to query Cloud Monitoring metric time-series (`serviceruntime.googleapis.com`) for:
-  * 1-hour rolling input tokens per model
-  * 1-hour rolling output tokens per model
-  * Quota ceiling and consumption percentage (`quota_used_pct`)
-* 💻 **Local Antigravity / Gemini CLI Log Tracking** *(Optional)*: Scans local conversation transcript JSONL logs on your machine to aggregate:
-  * Tokens consumed today (per-model and total)
-  * Tokens consumed this month (per-model and total)
-* 🛡️ **Fail-safe & Asynchronous Architecture**:
-  * Individual poll intervals for each data source
-  * Safe concurrency limiter (semaphore) to prevent rate-limit exhaustion during probing
-  * Zero-block event loop execution using Home Assistant thread executor pools
+### 1. Antigravity Compute Quotas (No Google API key required!)
+Monitors your active **Google Antigravity** dual-tier rolling compute capacity:
+* **Gemini Models**: Weekly Limit & 5-Hour rolling refresh window
+* **Claude & GPT Models**: Weekly Limit & 5-Hour rolling refresh window
+* **Live Reset Timers**: Countdown to reset (e.g., `Resets in 2d 19h` or `3h 16m`)
+* **Two Display Styles**: 
+  * **Quota Used (Increasing)**: 0% $\rightarrow$ 100% (fills up like CPU/RAM usage)
+  * **Quota Remaining (Decreasing)**: 100% $\rightarrow$ 0% (depletes like a battery)
+
+### 2. Google AI Studio Developer API *(Optional HACS Component)*
+For developers using raw Gemini API keys (`AIzaSy...`):
+* Dynamic model catalogue discovery (`GET /v1beta/models`)
+* Model context windows and token output ceilings
+* API health and round-trip HTTP latency
 
 ---
 
-## 📊 Sensor Entities
+## ⚡ Quick Start: Antigravity Real-Time Quota Monitor
 
-### 1. Global & Aggregate Sensors (Always Available)
+You **do not need HACS** to use the Antigravity Quota Monitor. It runs on the computer where Antigravity is installed and streams live sensors directly into Home Assistant via its native REST API.
 
-| Entity ID | Friendly Name | Unit | Description |
-| :--- | :--- | :--- | :--- |
-| `sensor.gemini_api_status` | API Status | - | Live status of the Gemini API (`Online` / `Offline`) |
-| `sensor.gemini_api_latency` | API Latency | ms | Round-trip HTTP response latency |
-| `sensor.gemini_model_count` | Available Model Count | models | Total count of Gemini models currently accessible |
-| `sensor.gemini_total_tokens_today` | Total Tokens Today | tokens | Combined local token usage recorded today *(if local logs enabled)* |
-| `sensor.gemini_total_tokens_this_month` | Total Tokens This Month | tokens | Combined local token usage recorded this month *(if local logs enabled)* |
+### Step 1: Get a Home Assistant Long-Lived Access Token
+1. Open your Home Assistant dashboard in your browser.
+2. Click your **User Profile** icon in the bottom-left corner.
+3. Select the **Security** tab (or scroll down to **Long-Lived Access Tokens**).
+4. Click **Create Token**, name it `Antigravity`, and copy the token string (`eyJhbGciOi...`).
 
-### 2. Per-Model Capacity Sensors (Generated for all models, e.g. `gemini_2_5_flash`)
+### Step 2: Configure Your Environment
+1. Clone this repository on the machine running Antigravity:
+   ```bash
+   git clone https://github.com/brunopatuleia/ha_gemini_usage.git
+   cd ha_gemini_usage
+   ```
+2. Copy the example configuration file:
+   ```bash
+   cp .env.example .env
+   ```
+3. Edit `.env` with your Home Assistant details:
+   ```ini
+   # Home Assistant URL (local IP, homeassistant.local, or Nabu Casa)
+   HA_URL=http://192.168.1.240:8123
 
-| Entity ID Pattern | Friendly Name | Unit | Source |
-| :--- | :--- | :--- | :--- |
-| `sensor.gemini_{model}_input_token_limit` | `{Model}` Input Token Limit | tokens | Model Metadata (Context Window) |
-| `sensor.gemini_{model}_output_token_limit` | `{Model}` Output Token Limit | tokens | Model Metadata (Max Output) |
+   # Paste the Long-Lived Access Token created in Step 1
+   HA_TOKEN=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 
-### 3. Conditional Source Sensors (Created only when source is configured)
+   # Sync interval in seconds (default: 60)
+   SYNC_INTERVAL=60
+   ```
 
-| Entity ID Pattern | Friendly Name | Unit | Required Source |
-| :--- | :--- | :--- | :--- |
-| `sensor.gemini_{model}_rpm_remaining` | `{Model}` Req/Min Remaining | requests | API Response Headers |
-| `sensor.gemini_{model}_tpm_remaining` | `{Model}` Tokens/Min Remaining | tokens | API Response Headers |
-| `sensor.gemini_{model}_rpd_remaining` | `{Model}` Req/Day Remaining | requests | API Response Headers |
-| `sensor.gemini_{model}_tokens_input_1h` | `{Model}` Input Tokens (1h) | tokens | Google Cloud Monitoring |
-| `sensor.gemini_{model}_tokens_output_1h` | `{Model}` Output Tokens (1h) | tokens | Google Cloud Monitoring |
-| `sensor.gemini_{model}_quota_used_pct` | `{Model}` Quota Used % | % | Google Cloud Monitoring |
-| `sensor.gemini_{model}_tokens_today` | `{Model}` Tokens Today (Local) | tokens | Local Antigravity Transcripts |
-| `sensor.gemini_{model}_tokens_this_month` | `{Model}` Tokens This Month (Local) | tokens | Local Antigravity Transcripts |
+### Step 3: Run the Sync Service
 
----
+#### Test it once:
+```bash
+python3 sync_antigravity_quota.py --once
+```
+You should see:
+```text
+[INFO] Successfully synced 4 Antigravity quota sensors to Home Assistant.
+```
 
-## 🚀 Installation
+#### Run permanently as a background service (Linux / systemd):
+```bash
+# Copy service definition to your user systemd directory
+mkdir -p ~/.config/systemd/user
+cp antigravity-ha-sync.service ~/.config/systemd/user/
 
-### Option 1: HACS (Recommended)
-1. Ensure [HACS](https://hacs.xyz/) is installed in your Home Assistant instance.
-2. In Home Assistant, navigate to **HACS** > **Integrations** > Three-dots menu (top right) > **Custom repositories**.
-3. Add repository URL: `https://github.com/brunopatuleia/ha_gemini_usage`
-4. Category: **Integration**
-5. Click **Download**, then restart Home Assistant.
-
-### Option 2: Manual Installation
-1. Download the latest release from the [Releases](https://github.com/brunopatuleia/ha_gemini_usage/releases) page.
-2. Copy the `custom_components/gemini_usage` directory into your Home Assistant `<config>/custom_components/` directory.
-3. Restart Home Assistant.
-
----
-
-## ⚙️ Configuration
-
-1. In Home Assistant, go to **Settings** > **Devices & Services** > **Add Integration**.
-2. Search for **Gemini Usage Monitor**.
-3. Follow the 3-step configuration flow:
-
-### Step 1: Gemini API Key (Required)
-* Enter your Gemini API key from [Google AI Studio](https://aistudio.google.com/app/apikey).
-* The integration verifies the key against `GET /v1beta/models` before proceeding.
-
-### Step 2: Google Cloud Platform Service Account (Optional)
-* If you link your Google Cloud project for quota monitoring:
-  * **GCP Project ID**: Your Google Cloud project ID.
-  * **Service Account JSON**: Paste the full contents of a GCP Service Account key with the `roles/monitoring.viewer` role.
-* *Leave blank to skip GCP Cloud Monitoring.*
-
-### Step 3: Local Brain Directory Path (Optional)
-* If running Home Assistant on a machine that also runs Antigravity or local Gemini CLI tooling:
-  * Specify the path to your brain directory (e.g. `C:\Users\<user>\.gemini\antigravity\brain`).
-* *Leave blank to skip local transcript parsing.*
+# Enable and start service
+systemctl --user daemon-reload
+systemctl --user enable antigravity-ha-sync.service
+systemctl --user start antigravity-ha-sync.service
+```
 
 ---
 
-## 🔧 Options & Customization
+## 📊 Live Home Assistant Entities
 
-Click **Configure** on the integration card to adjust settings at any time without removing the integration:
-* **API Rate-Limit Probe Interval**: 30 – 3600 seconds (Default: 60s)
-* **GCP Monitoring Poll Interval**: 60 – 3600 seconds (Default: 300s)
-* **Local Transcript Scan Interval**: 30 – 3600 seconds (Default: 120s)
-* Rotate API keys or update service account credentials on the fly.
+The sync service automatically creates and updates these sensors:
+
+| Entity ID | Friendly Name | Default Metric | Description |
+| :--- | :--- | :---: | :--- |
+| `sensor.antigravity_gemini_weekly` | Gemini Models — Weekly Quota Used | **Used %** | Weekly compute used by Gemini Flash / Pro |
+| `sensor.antigravity_gemini_5h` | Gemini Models — Five Hour Quota Used | **Used %** | 5-Hour rolling compute used by Gemini |
+| `sensor.antigravity_claude_gpt_weekly` | Claude & GPT — Weekly Quota Used | **Used %** | Weekly compute used by Claude Opus / Sonnet / GPT |
+| `sensor.antigravity_claude_gpt_5h` | Claude & GPT — Five Hour Quota Used | **Used %** | 5-Hour rolling compute used by Claude / GPT |
+| `sensor.antigravity_quota_status` | Antigravity Quota Status | `Online` | Connection status and heartbeat |
+
+> [!TIP]
+> **Both metrics are always available!**  
+> If you prefer explicit entity names:
+> * `sensor.antigravity_gemini_weekly_used` reports **Used %** (e.g. `20%`).
+> * `sensor.antigravity_gemini_weekly_remaining` reports **Remaining %** (e.g. `80%`).
+> * Every entity also contains `used_pct`, `remaining_pct`, `resets_in`, and `reset_time` in its attributes.
 
 ---
 
-## 📈 Example Dashboard Card
+## 📈 Home Assistant Dashboard Cards
+
+### 1. Visual Circular Gauges (Recommended)
+Matches standard severity thresholds (Green when usage is low, Red when near quota):
+
+```yaml
+type: vertical-stack
+title: Antigravity AI Compute Quotas
+cards:
+  - type: grid
+    title: Gemini Models
+    columns: 2
+    square: false
+    cards:
+      - type: gauge
+        entity: sensor.antigravity_gemini_weekly
+        name: Weekly Limit
+        min: 0
+        max: 100
+        severity:
+          green: 0
+          yellow: 70
+          red: 90
+      - type: gauge
+        entity: sensor.antigravity_gemini_5h
+        name: 5-Hour Limit
+        min: 0
+        max: 100
+        severity:
+          green: 0
+          yellow: 70
+          red: 90
+
+  - type: grid
+    title: Claude & GPT Models
+    columns: 2
+    square: false
+    cards:
+      - type: gauge
+        entity: sensor.antigravity_claude_gpt_weekly
+        name: Weekly Limit
+        min: 0
+        max: 100
+        severity:
+          green: 0
+          yellow: 70
+          red: 90
+      - type: gauge
+        entity: sensor.antigravity_claude_gpt_5h
+        name: 5-Hour Limit
+        min: 0
+        max: 100
+        severity:
+          green: 0
+          yellow: 70
+          red: 90
+```
+
+### 2. Compact List with Reset Timers
+Displays real-time countdowns (`resets_in`) under each model:
 
 ```yaml
 type: entities
-title: Google Gemini Usage
+title: Antigravity Usage
 show_header_toggle: false
 entities:
-  - entity: sensor.gemini_model_count
-    name: Accessible Models
   - type: section
-    label: Live Flash Rate Limits
-  - entity: sensor.gemini_2_0_flash_rpm_remaining
-    name: RPM Remaining
-  - entity: sensor.gemini_2_0_flash_tpm_remaining
-    name: TPM Remaining
-  - entity: sensor.gemini_2_0_flash_rpd_remaining
-    name: Daily Requests Remaining
+    label: Gemini Models
+  - entity: sensor.antigravity_gemini_weekly
+    name: Weekly Quota
+    secondary_info: attribute
+    attribute: resets_in
+  - entity: sensor.antigravity_gemini_5h
+    name: 5-Hour Rolling
+    secondary_info: attribute
+    attribute: resets_in
+
   - type: section
-    label: Local Usage Stats
-  - entity: sensor.gemini_total_tokens_today
-    name: Tokens Today
-  - entity: sensor.gemini_total_tokens_this_month
-    name: Tokens This Month
+    label: Claude & GPT Models
+  - entity: sensor.antigravity_claude_gpt_weekly
+    name: Weekly Quota
+    secondary_info: attribute
+    attribute: resets_in
+  - entity: sensor.antigravity_claude_gpt_5h
+    name: 5-Hour Rolling
+    secondary_info: attribute
+    attribute: resets_in
 ```
+
+---
+
+## 🔌 Google AI Studio HACS Integration *(Optional)*
+
+If you also develop apps with a direct Google Gemini API Key:
+
+1. In Home Assistant, open **HACS** > **Integrations** > **Custom repositories**.
+2. Add: `https://github.com/brunopatuleia/ha_gemini_usage` (Category: **Integration**).
+3. Download and restart Home Assistant.
+4. Go to **Settings > Devices & Services > Add Integration > Gemini Usage Monitor**.
+5. Paste your Gemini API key from [Google AI Studio](https://aistudio.google.com/app/apikey).
+
+---
+
+## ❓ Frequently Asked Questions (FAQ)
+
+#### Do I need a Google AI Studio API key for Antigravity quotas?
+**No.** Antigravity compute quotas are tied to your Google subscription and managed by the Antigravity CLI (`agy`). Once you are logged into `agy` on your computer, the sync daemon reads the quotas automatically without any API key.
+
+#### Does Home Assistant need to run on the same computer as Antigravity?
+**No.** As long as your computer can reach your Home Assistant instance over the local network (or via VPN / Nabu Casa), the script will push updates seamlessly.
+
+#### How do I change the update interval?
+Set `SYNC_INTERVAL=<seconds>` in your `.env` file (e.g. `SYNC_INTERVAL=30` for 30-second refreshes) and restart the service.
+
+#### Can I purge stale sensors from earlier test runs?
+Yes! Run:
+```bash
+python3 sync_antigravity_quota.py --cleanup-ghosts --once
+```
+This safely removes unavailable ghost sensors from previous test configurations.
 
 ---
 
