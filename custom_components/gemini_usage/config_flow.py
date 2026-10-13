@@ -103,7 +103,7 @@ def _default_local_paths() -> list[str]:
     return found
 
 
-async def _validate_api_key(api_key: str) -> tuple[bool, str]:
+async def _validate_api_key(hass: HomeAssistant, api_key: str) -> tuple[bool, str]:
     """Verify a Gemini API key by calling the models list endpoint.
 
     Makes a live network request to ``GET /v1beta/models?pageSize=1`` which
@@ -111,6 +111,7 @@ async def _validate_api_key(api_key: str) -> tuple[bool, str]:
     quota.  A ``200 OK`` response indicates the key is valid.
 
     Args:
+        hass: HomeAssistant instance used to get the aiohttp client session.
         api_key: The raw API key string entered by the user.
 
     Returns:

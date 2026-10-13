@@ -109,14 +109,21 @@ def parse_antigravity_data(data: dict[str, Any]) -> dict[str, Any]:
         "buckets": {},
     }
 
+    if not isinstance(data, dict):
+        _LOGGER.warning("Invalid data provided to parse_antigravity_data: expected dict, got %s", type(data).__name__)
+        return result
+
     groups = []
     if "command" in data and isinstance(data["command"], dict):
         cmd_data = data["command"].get("data", {})
-        groups = cmd_data.get("groups", [])
-    elif "groups" in data:
+        if isinstance(cmd_data, dict):
+            groups = cmd_data.get("groups", [])
+    elif "groups" in data and isinstance(data["groups"], list):
         groups = data["groups"]
-    elif "buckets" in data and isinstance(data["buckets"], dict):
-        result["buckets"] = data["buckets"]
+    elif "buckets" in data and isinstance(data["buckets"], list):
+        groups = [{"name": "", "buckets": data["buckets"]}]
+
+    if not isinstance(groups, list):
         return result
 
     for group in groups:
@@ -276,6 +283,7 @@ class GeminiUsageCoordinator(DataUpdateCoordinator):
 
         # Check agy CLI presence once at startup to avoid repeated disk traversals in event loop
         self._agy_available = shutil.which("agy") is not None
+        self._webhook_active: bool = True
 
         # Timestamps for tracking individual poll intervals
         self._last_api_health_fetch: float = 0.0
@@ -302,6 +310,11 @@ class GeminiUsageCoordinator(DataUpdateCoordinator):
     def is_local_configured(self) -> bool:
         """Return True if local transcript directory path is configured."""
         return bool(self._local_path)
+
+    @property
+    def is_antigravity_active(self) -> bool:
+        """Return True if Antigravity local daemon or webhook is active."""
+        return self._agy_available or self._webhook_active or bool(self._antigravity_data)
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch data from active sources respecting individual intervals."""
@@ -357,7 +370,9 @@ class GeminiUsageCoordinator(DataUpdateCoordinator):
         parsed = parse_antigravity_data(raw_data)
         if parsed.get("buckets"):
             self._antigravity_data = parsed
-            self.async_set_updated_data(self._build_data_dict())
+            # Update data and notify listeners without resetting coordinator's polling cadence
+            self.data = self._build_data_dict()
+            self.async_update_listeners()
 
     def _fetch_local_agy_quota(self) -> dict[str, Any] | None:
         """Run local agy CLI to fetch live quota JSON."""
@@ -378,7 +393,10 @@ class GeminiUsageCoordinator(DataUpdateCoordinator):
     async def _fetch_model_list(self) -> None:
         """Fetch full model catalogue from Gemini API and extract context limits."""
         if not self._api_key:
-            self._api_status = "Ready (Antigravity Quotas)"
+            _LOGGER.warning("Gemini API key is not configured; running in Antigravity quota monitoring mode")
+            self._api_status = "Offline"
+            if not self.is_antigravity_active:
+                raise UpdateFailed("Gemini API key is missing and Antigravity is inactive")
             return
 
         models = []
@@ -395,8 +413,8 @@ class GeminiUsageCoordinator(DataUpdateCoordinator):
                     if resp.status != 200:
                         body = await resp.text()
                         _LOGGER.warning("Failed to fetch model list: HTTP %s — %s", resp.status, body[:200])
-                        self._api_status = f"HTTP {resp.status}"
-                        if not self._models:
+                        self._api_status = "Offline"
+                        if not self._models and not self.is_antigravity_active:
                             raise UpdateFailed(f"HTTP {resp.status} fetching model list: {body[:100]}")
                         return
 
@@ -427,16 +445,16 @@ class GeminiUsageCoordinator(DataUpdateCoordinator):
             self._model_metadata = meta_map
             _LOGGER.debug("Discovered %d Gemini models", len(models))
 
-        except aiohttp.ClientError as exc:
+        except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
             self._api_status = "Offline"
             _LOGGER.warning("Error connecting to Gemini API: %s", exc)
-            if not self._models:
+            if not self._models and not self.is_antigravity_active:
                 raise UpdateFailed(f"Connection error to Gemini API: {exc}") from exc
 
     async def _check_api_health_and_probe(self) -> None:
         """Measure API availability and response latency."""
         if not self._api_key:
-            self._api_status = "Ready (Antigravity Quotas)"
+            self._api_status = "Offline"
             self._last_api_health_fetch = time.monotonic()
             return
 

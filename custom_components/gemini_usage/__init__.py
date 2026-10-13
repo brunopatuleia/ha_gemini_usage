@@ -122,6 +122,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             _LOGGER.warning("Invalid JSON received on Antigravity webhook: %s", exc)
             return
 
+        if not isinstance(data, dict):
+            _LOGGER.warning("Invalid payload received on Antigravity webhook: expected JSON object")
+            return
+
         target_coordinator: GeminiUsageCoordinator | None = getattr(entry, "runtime_data", None) or hass.data.get(DOMAIN, {}).get(entry.entry_id)
         if target_coordinator:
             await target_coordinator.async_update_antigravity_data(data)
@@ -167,6 +171,10 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         webhook.async_unregister(hass, WEBHOOK_ID_ANTIGRAVITY)
     except Exception:
         pass
+
+    target_coordinator: GeminiUsageCoordinator | None = getattr(entry, "runtime_data", None) or hass.data.get(DOMAIN, {}).get(entry.entry_id)
+    if target_coordinator:
+        target_coordinator._webhook_active = False
 
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok and DOMAIN in hass.data:

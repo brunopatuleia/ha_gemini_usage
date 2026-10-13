@@ -586,7 +586,20 @@ def sync_once(client: HomeAssistantClient) -> bool:
                 client.post_state(f"{base_id}_remaining", int_rem_pct, attrs_rem)
                 synced_count += 1
 
-                # 4. Burn Rate sensor
+                # 4. Resets In sensor
+                client.post_state(
+                    f"{base_id}_resets_in",
+                    resets_in,
+                    {
+                        "friendly_name": f"{cfg['name_used']} (Resets In)",
+                        "icon": "mdi:clock-outline",
+                        "reset_time": reset_time,
+                        "last_synced": now_iso,
+                    },
+                )
+                synced_count += 1
+
+                # 5. Burn Rate sensor
                 client.post_state(
                     f"{base_id}_burn_rate",
                     burn_rate_pct_per_h,
@@ -601,7 +614,7 @@ def sync_once(client: HomeAssistantClient) -> bool:
                 )
                 synced_count += 1
 
-                # 5. Projected Usage sensor
+                # 6. Projected Usage sensor
                 client.post_state(
                     f"{base_id}_projected",
                     projected_pct,
@@ -615,7 +628,7 @@ def sync_once(client: HomeAssistantClient) -> bool:
                 )
                 synced_count += 1
 
-                # 6. Runway sensor
+                # 7. Runway sensor
                 client.post_state(
                     f"{base_id}_runway",
                     runway_str,
@@ -629,7 +642,7 @@ def sync_once(client: HomeAssistantClient) -> bool:
                 )
                 synced_count += 1
 
-                # 7. Pace Status sensor
+                # 8. Pace Status sensor
                 client.post_state(
                     f"{base_id}_pace",
                     pace_status,
@@ -642,9 +655,9 @@ def sync_once(client: HomeAssistantClient) -> bool:
                 )
                 synced_count += 1
 
-                # 8. Over-Quota Risk Problem Binary Sensor
+                # 9. Over-Quota Risk Problem Binary Sensor
                 client.post_state(
-                    f"binary_{base_id.replace('sensor.', 'sensor.')}_over_quota_risk",
+                    base_id.replace("sensor.", "binary_sensor.") + "_over_quota_risk",
                     "on" if is_over_quota_risk else "off",
                     {
                         "friendly_name": f"{group_name} ({bucket.get('window', bucket_id)}) Over-Quota Risk",
@@ -758,7 +771,10 @@ def main() -> None:
                 ha_was_offline = True
         except HomeAssistantAuthError as err:
             _LOGGER.critical("Authentication failed: %s. Pausing for 300s.", err)
-            SHUTDOWN_EVENT.wait(300)
+            for _ in range(30):
+                if SHUTDOWN_EVENT.wait(10):
+                    break
+                sd_notify("WATCHDOG=1")
             continue
         except Exception as exc:
             _LOGGER.error("Error during sync cycle: %s", exc)
