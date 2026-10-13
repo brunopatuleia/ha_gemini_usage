@@ -33,7 +33,7 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up Antigravity binary sensor entities from a config entry."""
-    coordinator: GeminiUsageCoordinator = hass.data[DOMAIN][entry.entry_id]
+    coordinator: GeminiUsageCoordinator = getattr(entry, "runtime_data", None) or hass.data[DOMAIN][entry.entry_id]
 
     entities: list[AntigravityOverQuotaRiskBinarySensor] = []
     for sensor_key, sensor_def in ANTIGRAVITY_BINARY_SENSOR_DEFS.items():

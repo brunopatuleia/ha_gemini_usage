@@ -39,6 +39,7 @@ one place and makes localisation straightforward.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -47,8 +48,9 @@ from typing import Any
 import aiohttp
 import voluptuous as vol
 from homeassistant import config_entries
-from homeassistant.core import callback
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.data_entry_flow import FlowResult
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import (
     CONF_API_KEY,
@@ -116,16 +118,17 @@ async def _validate_api_key(api_key: str) -> tuple[bool, str]:
         string when ``success`` is ``True``.
     """
     # pageSize=1 minimises response payload — we only need the HTTP status.
-    url = f"{GEMINI_MODELS_ENDPOINT}?key={api_key}&pageSize=1"
+    url = f"{GEMINI_MODELS_ENDPOINT}?pageSize=1"
+    headers = {"x-goog-api-key": api_key}
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
-                if resp.status == 200:
-                    return True, ""
-                # Surface the first 200 chars of the error body to the log;
-                # the UI shows a generic error string from strings.json.
-                body = await resp.text()
-                return False, f"HTTP {resp.status}: {body[:200]}"
+        session = async_get_clientsession(hass)
+        async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+            if resp.status == 200:
+                return True, ""
+            # Surface the first 200 chars of the error body to the log;
+            # the UI shows a generic error string from strings.json.
+            body = await resp.text()
+            return False, f"HTTP {resp.status}: {body[:200]}"
     except aiohttp.ClientError as exc:
         return False, str(exc)
 
@@ -187,12 +190,18 @@ class GeminiUsageConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             api_key = user_input.get(CONF_API_KEY, "").strip()
+
+            # Prevent duplicate instances of identical configuration
+            unique_id = hashlib.sha256(api_key.encode()).hexdigest()[:16] if api_key else "antigravity_local"
+            await self.async_set_unique_id(unique_id)
+            self._abort_if_unique_id_configured()
+
             if not api_key:
                 # Key is optional: users can proceed with Antigravity compute quotas only
                 self._api_key = ""
                 return await self.async_step_gcp()
 
-            valid, error_msg = await _validate_api_key(api_key)
+            valid, error_msg = await _validate_api_key(self.hass, api_key)
             if valid:
                 self._api_key = api_key
                 # Advance to the (optional) GCP step.

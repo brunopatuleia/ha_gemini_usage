@@ -33,7 +33,8 @@ from typing import Any
 import aiohttp
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 
 from .const import (
@@ -81,6 +82,8 @@ def _format_resets_in(reset_time_iso: str) -> str:
     """Compute human-friendly relative reset duration like '2d 19h' or '3h 22m'."""
     try:
         target = datetime.fromisoformat(reset_time_iso.replace("Z", "+00:00"))
+        if target.tzinfo is None:
+            target = target.replace(tzinfo=timezone.utc)
         now = datetime.now(timezone.utc)
         diff = target - now
         total_seconds = int(diff.total_seconds())
@@ -122,11 +125,17 @@ def parse_antigravity_data(data: dict[str, Any]) -> dict[str, Any]:
             b_id = bucket.get("id")
             if not b_id:
                 continue
-            rem_frac = bucket.get("remaining_fraction")
-            if rem_frac is None:
+            rem_frac_raw = bucket.get("remaining_fraction")
+            if rem_frac_raw is None:
                 continue
+            try:
+                rem_frac = max(0.0, min(1.0, float(rem_frac_raw)))
+            except (ValueError, TypeError):
+                continue
+
+            used_frac = max(0.0, min(1.0, 1.0 - rem_frac))
             rem_pct = round(rem_frac * 100.0, 1)
-            used_pct = round(max(0.0, 100.0 - rem_pct), 1)
+            used_pct = round(used_frac * 100.0, 1)
             reset_time = bucket.get("reset_time", "")
             resets_in = _format_resets_in(reset_time) if reset_time else "Unknown"
 
@@ -134,33 +143,41 @@ def parse_antigravity_data(data: dict[str, Any]) -> dict[str, Any]:
             window_str = bucket.get("window", "")
             window_seconds = 5 * 3600 if "5h" in window_str or "5h" in b_id else 7 * 86400  # 5h or 7d
 
-            time_to_reset_seconds = 0
+            time_to_reset_seconds: int | None = None
             if reset_time:
                 try:
                     target_dt = datetime.fromisoformat(reset_time.replace("Z", "+00:00"))
+                    if target_dt.tzinfo is None:
+                        target_dt = target_dt.replace(tzinfo=timezone.utc)
                     now_dt = datetime.now(timezone.utc)
                     time_to_reset_seconds = max(0, int((target_dt - now_dt).total_seconds()))
                 except Exception:
-                    time_to_reset_seconds = 0
+                    time_to_reset_seconds = None
 
-            elapsed_seconds = max(0, window_seconds - time_to_reset_seconds)
-            elapsed_hours = elapsed_seconds / 3600.0
-            hours_to_reset = time_to_reset_seconds / 3600.0
+            if time_to_reset_seconds is not None:
+                elapsed_seconds = max(0, window_seconds - time_to_reset_seconds)
+                elapsed_hours = elapsed_seconds / 3600.0
+                hours_to_reset = time_to_reset_seconds / 3600.0
 
-            # Burn rate (% per hour)
-            if elapsed_hours >= 0.05 and used_pct > 0:
-                burn_rate_pct_per_h = round(used_pct / elapsed_hours, 2)
+                # Minimum observation window: at least 15m or 2% of total window to prevent early spikes
+                min_obs_hours = max(0.25, (window_seconds * 0.02) / 3600.0)
+                if elapsed_hours >= min_obs_hours and used_pct > 0:
+                    burn_rate_pct_per_h = round(used_pct / elapsed_hours, 2)
+                else:
+                    burn_rate_pct_per_h = 0.0
             else:
+                elapsed_hours = 0.0
+                hours_to_reset = 0.0
                 burn_rate_pct_per_h = 0.0
 
             # Projected total usage at reset time (%)
-            if hours_to_reset > 0 and burn_rate_pct_per_h > 0:
+            if time_to_reset_seconds is not None and hours_to_reset > 0 and burn_rate_pct_per_h > 0:
                 projected_pct = round(min(500.0, used_pct + (burn_rate_pct_per_h * hours_to_reset)), 1)
             else:
                 projected_pct = used_pct
 
             # Runway (hours until 100% exhaustion)
-            if burn_rate_pct_per_h > 0 and rem_pct > 0:
+            if burn_rate_pct_per_h > 0 and rem_frac > 0:
                 runway_hours = rem_pct / burn_rate_pct_per_h
                 total_runway_sec = int(runway_hours * 3600)
                 r_days = total_runway_sec // 86400
@@ -172,7 +189,7 @@ def parse_antigravity_data(data: dict[str, Any]) -> dict[str, Any]:
                     runway_str = f"{r_hrs}h {r_mins}m"
                 else:
                     runway_str = f"{r_mins}m"
-            elif rem_pct <= 0:
+            elif rem_frac <= 0 or used_pct >= 100:
                 runway_hours = 0.0
                 runway_str = "0m (Exhausted)"
             else:
@@ -180,10 +197,10 @@ def parse_antigravity_data(data: dict[str, Any]) -> dict[str, Any]:
                 runway_str = "Sufficient"
 
             # Over-quota risk & pace status
-            if rem_pct <= 0 or used_pct >= 100:
+            if rem_frac <= 0 or used_pct >= 100:
                 pace_status = "Exhausted"
                 is_over_quota_risk = True
-            elif projected_pct > 100.0 and time_to_reset_seconds > 0:
+            elif time_to_reset_seconds is not None and time_to_reset_seconds > 0 and projected_pct > 100.0:
                 pace_status = "High Risk (Over Quota)"
                 is_over_quota_risk = True
             elif projected_pct > 80.0:
@@ -193,11 +210,13 @@ def parse_antigravity_data(data: dict[str, Any]) -> dict[str, Any]:
                 pace_status = "Safe"
                 is_over_quota_risk = False
 
-            # Safe pace target
-            if hours_to_reset > 0:
-                safe_pace_pct_per_h = round(rem_pct / hours_to_reset, 2)
-            else:
+            # Safe pace target with reasonable bounds
+            if hours_to_reset >= 0.05:
+                safe_pace_pct_per_h = round(min(100.0, rem_pct / hours_to_reset), 2)
+            elif rem_frac <= 0:
                 safe_pace_pct_per_h = 0.0
+            else:
+                safe_pace_pct_per_h = 100.0
 
             result["buckets"][b_id] = {
                 "id": b_id,
@@ -206,7 +225,7 @@ def parse_antigravity_data(data: dict[str, Any]) -> dict[str, Any]:
                 "description": bucket.get("description", ""),
                 "window": bucket.get("window", ""),
                 "remaining_fraction": rem_frac,
-                "used_fraction": round(1.0 - rem_frac, 4),
+                "used_fraction": round(used_frac, 4),
                 "remaining_pct": rem_pct,
                 "used_pct": used_pct,
                 "reset_time": reset_time,
@@ -245,14 +264,18 @@ class GeminiUsageCoordinator(DataUpdateCoordinator):
             update_interval=update_interval,
         )
         self._entry = entry
-        self._api_key: str = entry.data.get(CONF_API_KEY, "")
-        self._gcp_project_id: str = entry.data.get(CONF_GCP_PROJECT_ID, "")
-        self._gcp_sa_json_str: str = entry.data.get(CONF_GCP_SERVICE_ACCOUNT_JSON, "")
-        self._local_path: str = entry.data.get(CONF_LOCAL_DB_PATH, "")
+        # Read options with fallback to entry.data so Options Flow edits take immediate effect
+        self._api_key: str = entry.options.get(CONF_API_KEY, entry.data.get(CONF_API_KEY, ""))
+        self._gcp_project_id: str = entry.options.get(CONF_GCP_PROJECT_ID, entry.data.get(CONF_GCP_PROJECT_ID, ""))
+        self._gcp_sa_json_str: str = entry.options.get(CONF_GCP_SERVICE_ACCOUNT_JSON, entry.data.get(CONF_GCP_SERVICE_ACCOUNT_JSON, ""))
+        self._local_path: str = entry.options.get(CONF_LOCAL_DB_PATH, entry.data.get(CONF_LOCAL_DB_PATH, ""))
 
         self._rate_limit_interval = rate_limit_interval
         self._gcp_interval = gcp_interval
         self._local_interval = local_interval
+
+        # Check agy CLI presence once at startup to avoid repeated disk traversals in event loop
+        self._agy_available = shutil.which("agy") is not None
 
         # Timestamps for tracking individual poll intervals
         self._last_api_health_fetch: float = 0.0
@@ -277,8 +300,8 @@ class GeminiUsageCoordinator(DataUpdateCoordinator):
 
     @property
     def is_local_configured(self) -> bool:
-        """Return True if local transcript directory path is configured and exists."""
-        return bool(self._local_path and os.path.isdir(self._local_path))
+        """Return True if local transcript directory path is configured."""
+        return bool(self._local_path)
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch data from active sources respecting individual intervals."""
@@ -304,7 +327,7 @@ class GeminiUsageCoordinator(DataUpdateCoordinator):
             tasks.append(self._fetch_local_usage())
 
         # Check local agy CLI if available on the system
-        if shutil.which("agy"):
+        if self._agy_available:
             agy_data = await self.hass.async_add_executor_job(self._fetch_local_agy_quota)
             if agy_data:
                 parsed = parse_antigravity_data(agy_data)
@@ -360,25 +383,28 @@ class GeminiUsageCoordinator(DataUpdateCoordinator):
 
         models = []
         page_token = ""
-        url_base = f"{GEMINI_MODELS_ENDPOINT}?key={self._api_key}&pageSize=50"
+        url_base = f"{GEMINI_MODELS_ENDPOINT}?pageSize=50"
+        headers = {"x-goog-api-key": self._api_key}
         start_time = time.monotonic()
+        session = async_get_clientsession(self.hass)
 
         try:
-            async with aiohttp.ClientSession() as session:
-                while True:
-                    url = url_base + (f"&pageToken={page_token}" if page_token else "")
-                    async with session.get(url, timeout=aiohttp.ClientTimeout(total=15)) as resp:
-                        if resp.status != 200:
-                            body = await resp.text()
-                            _LOGGER.warning("Failed to fetch model list: HTTP %s — %s", resp.status, body[:200])
-                            self._api_status = f"HTTP {resp.status}"
-                            return
+            while True:
+                url = url_base + (f"&pageToken={page_token}" if page_token else "")
+                async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=15)) as resp:
+                    if resp.status != 200:
+                        body = await resp.text()
+                        _LOGGER.warning("Failed to fetch model list: HTTP %s — %s", resp.status, body[:200])
+                        self._api_status = f"HTTP {resp.status}"
+                        if not self._models:
+                            raise UpdateFailed(f"HTTP {resp.status} fetching model list: {body[:100]}")
+                        return
 
-                        data = await resp.json()
-                        models.extend(data.get("models", []))
-                        page_token = data.get("nextPageToken", "")
-                        if not page_token:
-                            break
+                    data = await resp.json()
+                    models.extend(data.get("models", []))
+                    page_token = data.get("nextPageToken", "")
+                    if not page_token:
+                        break
 
             self._models = models
             self._api_status = "Online"
@@ -404,6 +430,8 @@ class GeminiUsageCoordinator(DataUpdateCoordinator):
         except aiohttp.ClientError as exc:
             self._api_status = "Offline"
             _LOGGER.warning("Error connecting to Gemini API: %s", exc)
+            if not self._models:
+                raise UpdateFailed(f"Connection error to Gemini API: {exc}") from exc
 
     async def _check_api_health_and_probe(self) -> None:
         """Measure API availability and response latency."""
@@ -412,18 +440,19 @@ class GeminiUsageCoordinator(DataUpdateCoordinator):
             self._last_api_health_fetch = time.monotonic()
             return
 
-        url = f"{GEMINI_MODELS_ENDPOINT}?key={self._api_key}&pageSize=1"
+        url = f"{GEMINI_MODELS_ENDPOINT}?pageSize=1"
+        headers = {"x-goog-api-key": self._api_key}
         start_time = time.monotonic()
+        session = async_get_clientsession(self.hass)
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
-                    latency = round((time.monotonic() - start_time) * 1000, 1)
-                    if resp.status == 200:
-                        self._api_status = "Online"
-                        self._api_latency_ms = latency
-                    else:
-                        self._api_status = f"HTTP {resp.status}"
-                        self._api_latency_ms = latency
+            async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                latency = round((time.monotonic() - start_time) * 1000, 1)
+                if resp.status == 200:
+                    self._api_status = "Online"
+                    self._api_latency_ms = latency
+                else:
+                    self._api_status = f"HTTP {resp.status}"
+                    self._api_latency_ms = latency
         except aiohttp.ClientError as exc:
             self._api_status = "Offline"
             self._api_latency_ms = None
@@ -458,8 +487,8 @@ class GeminiUsageCoordinator(DataUpdateCoordinator):
         headers = {"Authorization": f"Bearer {token}"}
 
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url, params=params, headers=headers, timeout=aiohttp.ClientTimeout(total=20)) as resp:
+            session = async_get_clientsession(self.hass)
+            async with session.get(url, params=params, headers=headers, timeout=aiohttp.ClientTimeout(total=20)) as resp:
                     if resp.status == 200:
                         data = await resp.json()
                         new_data = {}

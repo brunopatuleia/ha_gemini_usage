@@ -25,6 +25,7 @@ from typing import Any
 
 from homeassistant.components.sensor import SensorEntity, SensorStateClass
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -54,7 +55,7 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up Gemini Usage sensor entities from a config entry."""
-    coordinator: GeminiUsageCoordinator = hass.data[DOMAIN][entry.entry_id]
+    coordinator: GeminiUsageCoordinator = getattr(entry, "runtime_data", None) or hass.data[DOMAIN][entry.entry_id]
 
     entity_registry: dict[str, GeminiModelSensor] = {}
     aggregate_registry: dict[str, GeminiAggregateSensor] = {}
@@ -173,7 +174,7 @@ async def async_setup_entry(
             _LOGGER.debug("Registering %d new Gemini sensors", len(new_entities))
             async_add_entities(new_entities)
 
-    coordinator.async_add_listener(_handle_coordinator_update)
+    entry.async_on_unload(coordinator.async_add_listener(_handle_coordinator_update))
     _handle_coordinator_update()
 
 
@@ -193,7 +194,6 @@ def _device_info(entry: ConfigEntry) -> DeviceInfo:
 class GeminiModelSensor(CoordinatorEntity, SensorEntity):
     """Sensor entity representing a capacity or usage metric for an individual Gemini model."""
 
-    _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_has_entity_name = True
 
     def __init__(
@@ -215,6 +215,12 @@ class GeminiModelSensor(CoordinatorEntity, SensorEntity):
         self._attr_unit_of_measurement = sensor_def.get("unit")
         self._attr_icon = sensor_def.get("icon")
         self._attr_device_info = _device_info(entry)
+
+        if sensor_key in ("input_token_limit", "output_token_limit"):
+            self._attr_state_class = None
+            self._attr_entity_category = EntityCategory.DIAGNOSTIC
+        else:
+            self._attr_state_class = SensorStateClass.MEASUREMENT
 
     @property
     def name(self) -> str:

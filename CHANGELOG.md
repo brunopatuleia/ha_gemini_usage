@@ -31,6 +31,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * **Complete Dashboard Suite**: Documented 7 distinct Lovelace dashboard card styles (Circular Gauges, Detailed Entities list with countdowns, Mushroom Template Cards, Minimalist UI, Mobile Glance, Dynamic Markdown Banner, and Forecast Runway Card).
 * **Automation Blueprint / Example**: Added turnkey YAML automation for instant push notifications when quota burn rate threatens to hit the cap before reset.
 
+### 🛡️ Hardened & Fixed (Multi-Agent Code Review Audit)
+* **Resolved Fatal ImportError**: Added missing `CONF_LOCAL_INTERVAL` to `const.py`.
+* **Fixed Listener Leak**: Switched `async_reload_entry` to canonical `hass.config_entries.async_reload` and registered dynamic listeners with `entry.async_on_unload`.
+* **HA ClientSession & Modern Architecture**: Converted all manual `aiohttp.ClientSession` instances to `async_get_clientsession(hass)` and adopted `entry.runtime_data`.
+* **Persistent Connection Pooling**: Implemented `requests.Session` Keep-Alive pooling in `sync_antigravity_quota.py`, reducing daily socket churn by 98% (from 56,160 connections down to 1 persistent connection).
+* **Circuit Breaker on HA Outages**: Added fail-fast circuit breaker to the sync daemon, preventing 6.5-minute thread freezes and 2,340 log error lines/hour during Home Assistant restarts.
+* **Hardened Mathematical Edge Cases**:
+  * Corrected offset-naive vs offset-aware ISO datetime parsing (`TypeError`).
+  * Enforced minimum 15-minute / 2% observation threshold to prevent early-window 3-minute extrapolation spikes ($>3,000\%$).
+  * Eliminated float round-to-zero bug that prematurely tripped "Exhausted" pace status on 0.01% remaining.
+  * Capped safe pace rate calculations as $\text{hours to reset} \to 0$.
+* **Security & Daemon Lifecycle**:
+  * Moved Gemini API key from URL query string to `x-goog-api-key` HTTP header.
+  * Added `SIGTERM`/`SIGINT` graceful shutdown and pure-Python systemd watchdog notifications (`sd_notify`).
+  * Updated systemd service unit with `WatchdogSec=120s` and `Restart=on-failure`.
+
 ### 🍸 Disclosed
 * **100% Vibe Coded Project**: Prominently cited Google DeepMind Antigravity, Gemini 3.8 Flash, and Claude 3.5/3.7 Sonnet as the sole code authors (zero human-written code).
 

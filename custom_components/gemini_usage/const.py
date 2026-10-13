@@ -51,6 +51,9 @@ CONF_GCP_SERVICE_ACCOUNT_JSON = "gcp_service_account_json"
 CONF_LOCAL_DB_PATH = "local_db_path"
 """Path to Antigravity brain directory — optional; for local transcript log tracking."""
 
+CONF_LOCAL_INTERVAL = "local_interval"
+"""Poll interval in seconds for local transcript logs."""
+
 CONF_RATE_LIMIT_INTERVAL = "rate_limit_interval"
 """Poll interval in seconds for API health and live rate limit checks."""
 
