@@ -39,7 +39,9 @@ from .const import (
     DISPLAY_MODE_USED,
     DOMAIN,
     SENSOR_DEFS,
+    VERSION,
 )
+
 
 from .coordinator import GeminiUsageCoordinator, _model_slug
 
@@ -182,9 +184,10 @@ def _device_info(entry: ConfigEntry) -> DeviceInfo:
         name="Gemini Usage Monitor",
         manufacturer="Google",
         model="Gemini API",
-        sw_version="1.0.1",
+        sw_version=VERSION,
         entry_type="service",
     )
+
 
 
 class GeminiModelSensor(CoordinatorEntity, SensorEntity):
@@ -348,9 +351,10 @@ def _antigravity_device_info(entry: ConfigEntry) -> DeviceInfo:
         name="Google Antigravity",
         manufacturer="Google DeepMind",
         model="Antigravity 2.0",
-        sw_version="2.0",
+        sw_version=VERSION,
         entry_type="service",
     )
+
 
 
 class AntigravityQuotaSensor(CoordinatorEntity, SensorEntity):
@@ -424,6 +428,9 @@ class AntigravityQuotaSensor(CoordinatorEntity, SensorEntity):
         if sensor_type == "status":
             return ag_data.get("status", "Waiting for data")
 
+        if sensor_type == "version":
+            return VERSION
+
         bucket_id = self._sensor_def.get("bucket_id")
         bucket = ag_data.get("buckets", {}).get(bucket_id)
         if not bucket:
@@ -467,9 +474,11 @@ class AntigravityQuotaSensor(CoordinatorEntity, SensorEntity):
 
         attrs: dict[str, Any] = {
             "integration": DOMAIN,
+            "version": VERSION,
             "display_mode": self.display_mode,
             "last_synced": ag_data.get("last_updated"),
         }
+
 
         if bucket:
             attrs.update({

@@ -27,8 +27,12 @@ Architecture & Dynamic Entity Model:
 DOMAIN = "gemini_usage"
 """Unique domain identifier for this integration (must match custom_components directory name)."""
 
+VERSION = "1.1.0"
+"""Current integration and daemon release version."""
+
 PLATFORMS = ["sensor", "binary_sensor"]
 """Home Assistant entity platforms supported by this integration."""
+
 
 
 # ---------------------------------------------------------------------------
@@ -543,7 +547,15 @@ ANTIGRAVITY_SENSOR_DEFS: dict[str, dict] = {
         "group": "Claude and GPT models",
         "type": "pace",
     },
+    # 10. Integration Version & Diagnostics
+    "antigravity_version": {
+        "name": "Antigravity Integration Version",
+        "unit": None,
+        "icon": "mdi:tag-outline",
+        "type": "version",
+    },
 }
+
 
 # ---------------------------------------------------------------------------
 # Antigravity Binary Sensor definitions (Over-quota risk)

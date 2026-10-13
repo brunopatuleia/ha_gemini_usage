@@ -30,7 +30,9 @@ logging.basicConfig(
 _LOGGER = logging.getLogger("antigravity_ha_sync")
 
 DEFAULT_INTERVAL = 60  # seconds
+VERSION = "1.1.0"
 ENV_PATHS = [
+
     Path.cwd() / ".env",
     Path(__file__).parent / ".env",
     Path.home() / ".config" / "antigravity-ha-sync" / ".env",
@@ -513,7 +515,21 @@ def sync_once(ha_url: str, ha_token: str) -> bool:
             "icon": "mdi:cloud-check",
             "synced_sensors": synced_count,
             "last_synced": now_iso,
-            "version": "1.0.0",
+            "version": VERSION,
+        },
+    )
+
+    # Sync integration version sensor
+    post_state_to_ha(
+        ha_url,
+        ha_token,
+        "sensor.antigravity_version",
+        VERSION,
+        {
+            "friendly_name": "Antigravity Integration Version",
+            "icon": "mdi:tag-outline",
+            "installed_version": VERSION,
+            "last_synced": now_iso,
         },
     )
 
@@ -524,6 +540,7 @@ def sync_once(ha_url: str, ha_token: str) -> bool:
 def main() -> None:
     """CLI entrypoint."""
     parser = argparse.ArgumentParser(description="Sync Antigravity Quotas to Home Assistant")
+    parser.add_argument("--version", action="version", version=f"%(prog)s {VERSION}")
     parser.add_argument("--ha-url", help="Home Assistant base URL")
     parser.add_argument("--ha-token", help="Home Assistant Long-Lived Access Token")
     parser.add_argument("--interval", type=int, help="Sync interval in seconds (default 60)")
@@ -534,6 +551,7 @@ def main() -> None:
         help="Purge unavailable sensors left over from old vibe-coded sessions",
     )
     args = parser.parse_args()
+
 
     default_url, default_token, default_interval = get_config()
     ha_url = (args.ha_url or default_url).rstrip("/")

@@ -21,7 +21,7 @@ from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import ANTIGRAVITY_BINARY_SENSOR_DEFS, DOMAIN
+from .const import ANTIGRAVITY_BINARY_SENSOR_DEFS, DOMAIN, VERSION
 from .coordinator import GeminiUsageCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -55,9 +55,10 @@ def _antigravity_device_info(entry: ConfigEntry) -> DeviceInfo:
         name="Google Antigravity",
         manufacturer="Google DeepMind",
         model="Antigravity 2.0",
-        sw_version="2.0",
+        sw_version=VERSION,
         entry_type="service",
     )
+
 
 
 class AntigravityOverQuotaRiskBinarySensor(CoordinatorEntity, BinarySensorEntity):
