@@ -52,8 +52,20 @@ CONF_RATE_LIMIT_INTERVAL = "rate_limit_interval"
 CONF_GCP_INTERVAL = "gcp_interval"
 """Poll interval in seconds for GCP Cloud Monitoring time-series."""
 
-CONF_LOCAL_INTERVAL = "local_interval"
-"""Poll interval in seconds for local transcript log parsing."""
+CONF_DISPLAY_MODE = "display_mode"
+"""Display mode for Antigravity quotas: 'used' (Increasing) or 'remaining' (Decreasing)."""
+
+DISPLAY_MODE_USED = "used"
+"""Quota Used: 0% -> 100% (fills up like CPU/RAM usage)."""
+
+DISPLAY_MODE_REMAINING = "remaining"
+"""Quota Remaining: 100% -> 0% (depletes like battery/fuel)."""
+
+DEFAULT_DISPLAY_MODE = DISPLAY_MODE_USED
+"""Default display mode: Quota Used (Increasing)."""
+
+CONF_WEBHOOK_ID = "webhook_id"
+"""Webhook identifier for receiving Antigravity quota push updates."""
 
 # ---------------------------------------------------------------------------
 # Default poll intervals (in seconds)
@@ -246,3 +258,158 @@ AGGREGATE_SENSOR_DEFS: dict[str, dict] = {
         "source": "local",
     },
 }
+
+WEBHOOK_ID_ANTIGRAVITY = "gemini_usage_antigravity_quota"
+"""Default webhook ID for receiving Antigravity quota push updates."""
+
+# ---------------------------------------------------------------------------
+# Antigravity Compute Quota sensor definitions
+# ---------------------------------------------------------------------------
+
+ANTIGRAVITY_SENSOR_DEFS: dict[str, dict] = {
+    # 1. Primary Configurable Entities (dynamic: flips based on Options Flow display_mode)
+    "antigravity_gemini_weekly": {
+        "name_used": "Gemini Models — Weekly Quota Used",
+        "name_remaining": "Gemini Models — Weekly Limit Remaining",
+        "unit": "%",
+        "icon": "mdi:google",
+        "bucket_id": "gemini-weekly",
+        "group": "Gemini Models",
+        "type": "dynamic",
+    },
+    "antigravity_gemini_5h": {
+        "name_used": "Gemini Models — Five Hour Quota Used",
+        "name_remaining": "Gemini Models — Five Hour Limit Remaining",
+        "unit": "%",
+        "icon": "mdi:clock-fast",
+        "bucket_id": "gemini-5h",
+        "group": "Gemini Models",
+        "type": "dynamic",
+    },
+    "antigravity_claude_gpt_weekly": {
+        "name_used": "Claude & GPT — Weekly Quota Used",
+        "name_remaining": "Claude & GPT — Weekly Limit Remaining",
+        "unit": "%",
+        "icon": "mdi:creation-outline",
+        "bucket_id": "3p-weekly",
+        "group": "Claude and GPT models",
+        "type": "dynamic",
+    },
+    "antigravity_claude_gpt_5h": {
+        "name_used": "Claude & GPT — Five Hour Quota Used",
+        "name_remaining": "Claude & GPT — Five Hour Limit Remaining",
+        "unit": "%",
+        "icon": "mdi:clock-fast",
+        "bucket_id": "3p-5h",
+        "group": "Claude and GPT models",
+        "type": "dynamic",
+    },
+    # 2. Dedicated Used % Entities (Always Increasing: 0% -> 100%)
+    "antigravity_gemini_weekly_used": {
+        "name": "Gemini Models — Weekly Quota Used",
+        "unit": "%",
+        "icon": "mdi:google",
+        "bucket_id": "gemini-weekly",
+        "group": "Gemini Models",
+        "type": "used",
+    },
+    "antigravity_gemini_5h_used": {
+        "name": "Gemini Models — Five Hour Quota Used",
+        "unit": "%",
+        "icon": "mdi:clock-fast",
+        "bucket_id": "gemini-5h",
+        "group": "Gemini Models",
+        "type": "used",
+    },
+    "antigravity_claude_gpt_weekly_used": {
+        "name": "Claude & GPT — Weekly Quota Used",
+        "unit": "%",
+        "icon": "mdi:creation-outline",
+        "bucket_id": "3p-weekly",
+        "group": "Claude and GPT models",
+        "type": "used",
+    },
+    "antigravity_claude_gpt_5h_used": {
+        "name": "Claude & GPT — Five Hour Quota Used",
+        "unit": "%",
+        "icon": "mdi:clock-fast",
+        "bucket_id": "3p-5h",
+        "group": "Claude and GPT models",
+        "type": "used",
+    },
+    # 3. Dedicated Remaining % Entities (Always Decreasing: 100% -> 0%)
+    "antigravity_gemini_weekly_remaining": {
+        "name": "Gemini Models — Weekly Limit Remaining",
+        "unit": "%",
+        "icon": "mdi:google",
+        "bucket_id": "gemini-weekly",
+        "group": "Gemini Models",
+        "type": "remaining",
+    },
+    "antigravity_gemini_5h_remaining": {
+        "name": "Gemini Models — Five Hour Limit Remaining",
+        "unit": "%",
+        "icon": "mdi:clock-fast",
+        "bucket_id": "gemini-5h",
+        "group": "Gemini Models",
+        "type": "remaining",
+    },
+    "antigravity_claude_gpt_weekly_remaining": {
+        "name": "Claude & GPT — Weekly Limit Remaining",
+        "unit": "%",
+        "icon": "mdi:creation-outline",
+        "bucket_id": "3p-weekly",
+        "group": "Claude and GPT models",
+        "type": "remaining",
+    },
+    "antigravity_claude_gpt_5h_remaining": {
+        "name": "Claude & GPT — Five Hour Limit Remaining",
+        "unit": "%",
+        "icon": "mdi:clock-fast",
+        "bucket_id": "3p-5h",
+        "group": "Claude and GPT models",
+        "type": "remaining",
+    },
+    # 4. Explicit countdown sensors
+    "antigravity_gemini_weekly_resets_in": {
+        "name": "Gemini Models — Weekly Reset In",
+        "unit": None,
+        "icon": "mdi:timer-sand",
+        "bucket_id": "gemini-weekly",
+        "group": "Gemini Models",
+        "type": "resets_in",
+    },
+    "antigravity_gemini_5h_resets_in": {
+        "name": "Gemini Models — 5-Hour Reset In",
+        "unit": None,
+        "icon": "mdi:timer-sand",
+        "bucket_id": "gemini-5h",
+        "group": "Gemini Models",
+        "type": "resets_in",
+    },
+    "antigravity_claude_gpt_weekly_resets_in": {
+        "name": "Claude & GPT — Weekly Reset In",
+        "unit": None,
+        "icon": "mdi:timer-sand",
+        "bucket_id": "3p-weekly",
+        "group": "Claude and GPT models",
+        "type": "resets_in",
+    },
+    "antigravity_claude_gpt_5h_resets_in": {
+        "name": "Claude & GPT — 5-Hour Reset In",
+        "unit": None,
+        "icon": "mdi:timer-sand",
+        "bucket_id": "3p-5h",
+        "group": "Claude and GPT models",
+        "type": "resets_in",
+    },
+    # 5. Overall Sync Status
+    "antigravity_quota_status": {
+        "name": "Antigravity Quota Status",
+        "unit": None,
+        "icon": "mdi:cloud-check",
+        "type": "status",
+    },
+}
+
+

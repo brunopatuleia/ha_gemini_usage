@@ -99,9 +99,16 @@ systemctl --user start antigravity-ha-sync.service
 
 ---
 
-## 📊 Live Home Assistant Entities
+## 📊 Live Home Assistant Entities & Unique IDs
 
-The sync service automatically creates and updates these sensors:
+All sensors are registered with native **Unique IDs** and grouped under the **Google Antigravity** device in Home Assistant's Entity Registry. This means you can:
+* Manage them directly in the Home Assistant UI without warnings.
+* Assign them to Areas (e.g. *Office* or *Developer Lab*).
+* Customize friendly names, icons, and display precision right from the UI.
+* View complete historical graphs, states, and long-term statistics.
+
+### Primary Entities (Configurable Mode)
+These entities dynamically adapt their state and label to your display preference:
 
 | Entity ID | Friendly Name | Default Metric | Description |
 | :--- | :--- | :---: | :--- |
@@ -109,21 +116,89 @@ The sync service automatically creates and updates these sensors:
 | `sensor.antigravity_gemini_5h` | Gemini Models — Five Hour Quota Used | **Used %** | 5-Hour rolling compute used by Gemini |
 | `sensor.antigravity_claude_gpt_weekly` | Claude & GPT — Weekly Quota Used | **Used %** | Weekly compute used by Claude Opus / Sonnet / GPT |
 | `sensor.antigravity_claude_gpt_5h` | Claude & GPT — Five Hour Quota Used | **Used %** | 5-Hour rolling compute used by Claude / GPT |
-| `sensor.antigravity_quota_status` | Antigravity Quota Status | `Online` | Connection status and heartbeat |
+| `sensor.antigravity_quota_status` | Antigravity Quota Status | `Online` | Connection status and sync heartbeat |
 
-> [!TIP]
-> **Both metrics are always available!**  
-> If you prefer explicit entity names:
-> * `sensor.antigravity_gemini_weekly_used` reports **Used %** (e.g. `20%`).
-> * `sensor.antigravity_gemini_weekly_remaining` reports **Remaining %** (e.g. `80%`).
-> * Every entity also contains `used_pct`, `remaining_pct`, `resets_in`, and `reset_time` in its attributes.
+---
+
+## ⚖️ Quota Display Modes: Google Way vs. Your Way
+
+Google presents quotas as **Remaining %** (decreasing from 100% $\rightarrow$ 0%, like a battery). Many developers prefer **Used %** (increasing from 0% $\rightarrow$ 100%, like CPU/RAM usage).
+
+**Do you have to choose between a single entity or both? You get BOTH!**
+
+1. **Option A: Single Configurable Entity (UI Dropdown)**
+   * In Home Assistant, go to **Settings > Devices & Services > Gemini Usage Monitor > Configure**.
+   * Select your preferred **Antigravity Quota Display Mode**:
+     * **Increasing (0% → 100% Used)** — *The user's preferred style!*
+     * **Decreasing (100% → 0% Remaining)** — *Google's default style!*
+   * Your primary sensors (`sensor.antigravity_gemini_weekly`, etc.) immediately switch values and icons, meaning you never need to edit your dashboard cards if you change your mind!
+
+2. **Option B: Dedicated Entities Available Simultaneously**
+   If you want to display BOTH on your dashboard at the same time (e.g., a Gauge for Used % and a secondary stat for Remaining %), both explicit entities are always published:
+   * **Used % Sensors (Always 0% → 100%)**:
+     * `sensor.antigravity_gemini_weekly_used`
+     * `sensor.antigravity_gemini_5h_used`
+     * `sensor.antigravity_claude_gpt_weekly_used`
+     * `sensor.antigravity_claude_gpt_5h_used`
+   * **Remaining % Sensors (Always 100% → 0%)**:
+     * `sensor.antigravity_gemini_weekly_remaining`
+     * `sensor.antigravity_gemini_5h_remaining`
+     * `sensor.antigravity_claude_gpt_weekly_remaining`
+     * `sensor.antigravity_claude_gpt_5h_remaining`
+   * **Reset Countdown Sensors**:
+     * `sensor.antigravity_gemini_weekly_resets_in` (e.g. `2d 18h`)
+     * `sensor.antigravity_gemini_5h_resets_in` (e.g. `2h 25m`)
+     * `sensor.antigravity_claude_gpt_weekly_resets_in` (e.g. `1d 17h`)
+     * `sensor.antigravity_claude_gpt_5h_resets_in` (e.g. `Now` or `4h 59m`)
+
+3. **Rich Attributes on Every Sensor**
+   Regardless of entity or display mode, every sensor stores:
+   `used_pct`, `remaining_pct`, `used_fraction`, `remaining_fraction`, `reset_time`, `resets_in`, `group`, and `window` in its state attributes for complete templating freedom!
+
 
 ---
 
 ## 📈 Home Assistant Dashboard Cards
 
-### 1. Visual Circular Gauges (Recommended)
-Matches standard severity thresholds (Green when usage is low, Red when near quota):
+### 1. Detailed Entities List with Countdown Timers (Visual Editor Ready)
+Shows both your consumed percentage and the live reset countdown (`Resets In`), fully compatible with Home Assistant's UI visual editor:
+
+<p align="center">
+  <img src="images/entities_card.png" alt="Antigravity Entities Card Preview" width="500">
+</p>
+
+```yaml
+type: entities
+title: Antigravity Usage
+show_header_toggle: false
+entities:
+  - type: section
+    label: Gemini Models
+  - entity: sensor.antigravity_gemini_weekly
+    name: Weekly Quota Used
+  - entity: sensor.antigravity_gemini_weekly_resets_in
+    name: Resets In
+  - entity: sensor.antigravity_gemini_5h
+    name: 5-Hour Quota Used
+  - entity: sensor.antigravity_gemini_5h_resets_in
+    name: Resets In
+
+  - type: section
+    label: Claude & GPT Models
+  - entity: sensor.antigravity_claude_gpt_weekly
+    name: Weekly Quota Used
+  - entity: sensor.antigravity_claude_gpt_weekly_resets_in
+    name: Resets In
+  - entity: sensor.antigravity_claude_gpt_5h
+    name: 5-Hour Quota Used
+  - entity: sensor.antigravity_claude_gpt_5h_resets_in
+    name: Resets In
+```
+
+---
+
+### 2. Visual Circular Gauges (Color Severity)
+Circular radial gauges with color severity thresholds (Green for low usage, Yellow for moderate, Red when near quota):
 
 ```yaml
 type: vertical-stack
@@ -178,8 +253,10 @@ cards:
           red: 90
 ```
 
-### 2. Compact List with Reset Timers
-Displays real-time countdowns (`resets_in`) under each model:
+---
+
+### 3. Minimalist Entities List (Without Gauges, Clean Percentages)
+A clean, compact list displaying only the percentages with zero clutter:
 
 ```yaml
 type: entities
@@ -189,24 +266,85 @@ entities:
   - type: section
     label: Gemini Models
   - entity: sensor.antigravity_gemini_weekly
-    name: Weekly Quota
-    secondary_info: attribute
-    attribute: resets_in
+    name: Weekly Quota Used
   - entity: sensor.antigravity_gemini_5h
-    name: 5-Hour Rolling
-    secondary_info: attribute
-    attribute: resets_in
+    name: 5-Hour Quota Used
 
   - type: section
     label: Claude & GPT Models
   - entity: sensor.antigravity_claude_gpt_weekly
-    name: Weekly Quota
-    secondary_info: attribute
-    attribute: resets_in
+    name: Weekly Quota Used
   - entity: sensor.antigravity_claude_gpt_5h
-    name: 5-Hour Rolling
-    secondary_info: attribute
-    attribute: resets_in
+    name: 5-Hour Quota Used
+```
+
+---
+
+### 4. Modern Mushroom Template Cards (Compact Pills)
+If you have [Mushroom Cards](https://github.com/piitaya/lovelace-mushroom) installed, you can render custom subtitle lines with live reset times:
+
+```yaml
+type: vertical-stack
+title: Antigravity Usage
+cards:
+  - type: custom:mushroom-template-card
+    primary: "Gemini Weekly: {{ states('sensor.antigravity_gemini_weekly') }}% Used"
+    secondary: "Resets in {{ states('sensor.antigravity_gemini_weekly_resets_in') }}"
+    icon: mdi:google
+    icon_color: blue
+
+  - type: custom:mushroom-template-card
+    primary: "Gemini 5-Hour: {{ states('sensor.antigravity_gemini_5h') }}% Used"
+    secondary: "Resets in {{ states('sensor.antigravity_gemini_5h_resets_in') }}"
+    icon: mdi:clock-fast
+    icon_color: light-blue
+
+  - type: custom:mushroom-template-card
+    primary: "Claude & GPT Weekly: {{ states('sensor.antigravity_claude_gpt_weekly') }}% Used"
+    secondary: "Resets in {{ states('sensor.antigravity_claude_gpt_weekly_resets_in') }}"
+    icon: mdi:creation-outline
+    icon_color: orange
+
+  - type: custom:mushroom-template-card
+    primary: "Claude & GPT 5-Hour: {{ states('sensor.antigravity_claude_gpt_5h') }}% Used"
+    secondary: "Resets in {{ states('sensor.antigravity_claude_gpt_5h_resets_in') }}"
+    icon: mdi:clock-fast
+    icon_color: purple
+```
+
+---
+
+### 5. Compact Glance Card (Quick Icon Overview)
+A single compact row showing all 4 metrics side by side, perfect for mobile views or header rows:
+
+```yaml
+type: glance
+title: Antigravity Quick Overview
+entities:
+  - entity: sensor.antigravity_gemini_weekly
+    name: Gemini Wk
+  - entity: sensor.antigravity_gemini_5h
+    name: Gemini 5h
+  - entity: sensor.antigravity_claude_gpt_weekly
+    name: Claude Wk
+  - entity: sensor.antigravity_claude_gpt_5h
+    name: Claude 5h
+```
+
+---
+
+### 6. Dynamic Markdown Summary Card
+A lightweight text banner you can embed anywhere in your dashboards:
+
+```yaml
+type: markdown
+title: Antigravity Status
+content: >
+  **Status**: {{ states('sensor.antigravity_quota_status') }}  
+  * **Gemini Weekly**: {{ states('sensor.antigravity_gemini_weekly') }}% used (resets in {{ states('sensor.antigravity_gemini_weekly_resets_in') }})  
+  * **Gemini 5-Hour**: {{ states('sensor.antigravity_gemini_5h') }}% used (resets in {{ states('sensor.antigravity_gemini_5h_resets_in') }})  
+  * **Claude/GPT Weekly**: {{ states('sensor.antigravity_claude_gpt_weekly') }}% used (resets in {{ states('sensor.antigravity_claude_gpt_weekly_resets_in') }})  
+  * **Claude/GPT 5-Hour**: {{ states('sensor.antigravity_claude_gpt_5h') }}% used (resets in {{ states('sensor.antigravity_claude_gpt_5h_resets_in') }})
 ```
 
 ---

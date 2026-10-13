@@ -48,8 +48,10 @@ from .const import (
     DEFAULT_RATE_LIMIT_INTERVAL,
     DOMAIN,
     PLATFORMS,
+    WEBHOOK_ID_ANTIGRAVITY,
 )
 from .coordinator import GeminiUsageCoordinator
+
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -110,6 +112,31 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # for each platform listed here.
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
+    # Register Webhook for Antigravity Quota push updates
+    async def async_handle_antigravity_webhook(hass: HomeAssistant, webhook_id: str, request) -> None:
+        """Handle incoming Antigravity quota updates via webhook."""
+        try:
+            data = await request.json()
+        except Exception as exc:
+            _LOGGER.warning("Invalid JSON received on Antigravity webhook: %s", exc)
+            return
+
+        target_coordinator: GeminiUsageCoordinator | None = hass.data.get(DOMAIN, {}).get(entry.entry_id)
+        if target_coordinator:
+            await target_coordinator.async_update_antigravity_data(data)
+
+    try:
+        from homeassistant.components import webhook
+        webhook.async_register(
+            hass,
+            DOMAIN,
+            "Antigravity Quotas",
+            WEBHOOK_ID_ANTIGRAVITY,
+            async_handle_antigravity_webhook,
+        )
+    except Exception as exc:
+        _LOGGER.debug("Webhook registration note: %s", exc)
+
     # Register async_reload_entry as the options-change listener.  HA calls
     # it whenever the user saves changes in the options flow UI.
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))
@@ -134,6 +161,12 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     Returns:
         ``True`` if all platforms unloaded successfully.
     """
+    try:
+        from homeassistant.components import webhook
+        webhook.async_unregister(hass, WEBHOOK_ID_ANTIGRAVITY)
+    except Exception:
+        pass
+
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok:
         # Only remove from hass.data if platforms unloaded cleanly; leaving
@@ -141,6 +174,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         # attempt to start from a known-good state.
         hass.data[DOMAIN].pop(entry.entry_id)
     return unload_ok
+
 
 
 async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:

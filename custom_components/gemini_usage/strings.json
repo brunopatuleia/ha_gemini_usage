@@ -38,7 +38,8 @@
       "init": {
         "title": "Gemini Usage Monitor — Options",
         "data": {
-          "api_key": "Gemini API Key",
+          "display_mode": "Antigravity Quota Display Mode",
+          "api_key": "Gemini API Key (Optional if only monitoring Antigravity)",
           "gcp_project_id": "GCP Project ID",
           "gcp_service_account_json": "Service Account JSON Key",
           "local_db_path": "Antigravity Brain Directory Path",
@@ -46,6 +47,7 @@
           "gcp_interval": "GCP Monitoring poll interval (seconds)",
           "local_interval": "Local transcript scan interval (seconds)"
         }
+
       }
     }
   }

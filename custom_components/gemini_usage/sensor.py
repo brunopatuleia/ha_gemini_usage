@@ -32,9 +32,15 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (
     AGGREGATE_SENSOR_DEFS,
+    ANTIGRAVITY_SENSOR_DEFS,
+    CONF_DISPLAY_MODE,
+    DEFAULT_DISPLAY_MODE,
+    DISPLAY_MODE_REMAINING,
+    DISPLAY_MODE_USED,
     DOMAIN,
     SENSOR_DEFS,
 )
+
 from .coordinator import GeminiUsageCoordinator, _model_slug
 
 _LOGGER = logging.getLogger(__name__)
@@ -69,6 +75,20 @@ async def async_setup_entry(
         aggregate_entities.append(sensor)
 
     async_add_entities(aggregate_entities)
+
+    # Register Google Antigravity quota sensors (with Unique ID and UI management)
+    antigravity_entities: list[AntigravityQuotaSensor] = []
+    for sensor_key, sensor_def in ANTIGRAVITY_SENSOR_DEFS.items():
+        sensor = AntigravityQuotaSensor(
+            coordinator=coordinator,
+            entry=entry,
+            sensor_key=sensor_key,
+            sensor_def=sensor_def,
+        )
+        antigravity_entities.append(sensor)
+
+    async_add_entities(antigravity_entities)
+
 
     @callback
     def _handle_coordinator_update() -> None:
@@ -319,3 +339,131 @@ class GeminiAggregateSensor(CoordinatorEntity, SensorEntity):
             attrs["model_count"] = len(data.get("models", []))
 
         return attrs
+
+
+def _antigravity_device_info(entry: ConfigEntry) -> DeviceInfo:
+    """Return DeviceInfo grouping all Google Antigravity sensors."""
+    return DeviceInfo(
+        identifiers={(DOMAIN, f"{entry.entry_id}_antigravity")},
+        name="Google Antigravity",
+        manufacturer="Google DeepMind",
+        model="Antigravity 2.0",
+        sw_version="2.0",
+        entry_type="service",
+    )
+
+
+class AntigravityQuotaSensor(CoordinatorEntity, SensorEntity):
+    """Sensor entity for Google Antigravity compute quotas with full UI management support."""
+
+    _attr_has_entity_name = True
+
+    def __init__(
+        self,
+        coordinator: GeminiUsageCoordinator,
+        entry: ConfigEntry,
+        sensor_key: str,
+        sensor_def: dict,
+    ) -> None:
+        """Initialise Antigravity quota sensor."""
+        super().__init__(coordinator)
+        self._sensor_key = sensor_key
+        self._sensor_def = sensor_def
+        self._entry = entry
+
+        # Unique ID guarantees this entity is stored in HA's Entity Registry
+        self._attr_unique_id = f"{entry.entry_id}_{sensor_key}"
+        self._attr_device_info = _antigravity_device_info(entry)
+        self._attr_unit_of_measurement = sensor_def.get("unit")
+        if sensor_def.get("unit") == "%":
+            self._attr_state_class = SensorStateClass.MEASUREMENT
+
+    @property
+    def display_mode(self) -> str:
+        """Return user-configured display mode: 'used' (Increasing) or 'remaining' (Decreasing)."""
+        return self._entry.options.get(
+            CONF_DISPLAY_MODE,
+            self._entry.data.get(CONF_DISPLAY_MODE, DEFAULT_DISPLAY_MODE),
+        )
+
+    @property
+    def name(self) -> str:
+        """Return sensor label."""
+        sensor_type = self._sensor_def.get("type", "")
+        if sensor_type == "dynamic":
+            if self.display_mode == DISPLAY_MODE_REMAINING:
+                return self._sensor_def.get("name_remaining", self._sensor_def.get("name", self._sensor_key))
+            return self._sensor_def.get("name_used", self._sensor_def.get("name", self._sensor_key))
+        return self._sensor_def.get("name", self._sensor_key)
+
+    @property
+    def icon(self) -> str | None:
+        """Return icon based on state or type."""
+        sensor_type = self._sensor_def.get("type", "")
+        if sensor_type == "resets_in":
+            return "mdi:timer-sand"
+        if sensor_type == "status":
+            return "mdi:cloud-check"
+        return self._sensor_def.get("icon", "mdi:chart-donut")
+
+    @property
+    def native_value(self) -> int | float | str | None:
+        """Return current sensor state."""
+        data = self.coordinator.data or {}
+        ag_data = data.get("antigravity", {})
+        sensor_type = self._sensor_def.get("type", "")
+
+        if sensor_type == "status":
+            return ag_data.get("status", "Waiting for data")
+
+        bucket_id = self._sensor_def.get("bucket_id")
+        bucket = ag_data.get("buckets", {}).get(bucket_id)
+        if not bucket:
+            return None
+
+        if sensor_type == "dynamic":
+            if self.display_mode == DISPLAY_MODE_REMAINING:
+                return bucket.get("remaining_pct")
+            return bucket.get("used_pct")
+
+        if sensor_type == "used":
+            return bucket.get("used_pct")
+
+        if sensor_type == "remaining":
+            return bucket.get("remaining_pct")
+
+        if sensor_type == "resets_in":
+            return bucket.get("resets_in")
+
+        return None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return rich metadata including both used and remaining percentages."""
+        data = self.coordinator.data or {}
+        ag_data = data.get("antigravity", {})
+        bucket_id = self._sensor_def.get("bucket_id")
+        bucket = ag_data.get("buckets", {}).get(bucket_id)
+
+        attrs: dict[str, Any] = {
+            "integration": DOMAIN,
+            "display_mode": self.display_mode,
+            "last_synced": ag_data.get("last_updated"),
+        }
+
+        if bucket:
+            attrs.update({
+                "bucket_id": bucket_id,
+                "group": bucket.get("group", self._sensor_def.get("group")),
+                "window": bucket.get("window"),
+                "used_pct": bucket.get("used_pct"),
+                "remaining_pct": bucket.get("remaining_pct"),
+                "used_fraction": bucket.get("used_fraction"),
+                "remaining_fraction": bucket.get("remaining_fraction"),
+                "reset_time": bucket.get("reset_time"),
+                "resets_in": bucket.get("resets_in"),
+                "description": bucket.get("description"),
+            })
+
+        return attrs
+

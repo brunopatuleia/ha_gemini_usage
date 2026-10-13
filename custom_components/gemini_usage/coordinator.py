@@ -24,6 +24,8 @@ import json
 import logging
 import os
 import re
+import shutil
+import subprocess
 import time
 from datetime import datetime, timezone
 from typing import Any
@@ -32,6 +34,7 @@ import aiohttp
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
+
 
 from .const import (
     CONF_API_KEY,
@@ -74,8 +77,79 @@ def _model_slug(name: str) -> str:
     return slug
 
 
+def _format_resets_in(reset_time_iso: str) -> str:
+    """Compute human-friendly relative reset duration like '2d 19h' or '3h 22m'."""
+    try:
+        target = datetime.fromisoformat(reset_time_iso.replace("Z", "+00:00"))
+        now = datetime.now(timezone.utc)
+        diff = target - now
+        total_seconds = int(diff.total_seconds())
+        if total_seconds <= 0:
+            return "Now"
+        days = total_seconds // 86400
+        hours = (total_seconds % 86400) // 3600
+        minutes = (total_seconds % 3600) // 60
+        if days > 0:
+            return f"{days}d {hours}h"
+        if hours > 0:
+            return f"{hours}h {minutes}m"
+        return f"{minutes}m"
+    except Exception:
+        return "Unknown"
+
+
+def parse_antigravity_data(data: dict[str, Any]) -> dict[str, Any]:
+    """Parse raw JSON from agy /quota or sync script into structured bucket dict."""
+    result: dict[str, Any] = {
+        "status": "Online",
+        "last_updated": datetime.now(timezone.utc).isoformat(),
+        "buckets": {},
+    }
+
+    groups = []
+    if "command" in data and isinstance(data["command"], dict):
+        cmd_data = data["command"].get("data", {})
+        groups = cmd_data.get("groups", [])
+    elif "groups" in data:
+        groups = data["groups"]
+    elif "buckets" in data and isinstance(data["buckets"], dict):
+        result["buckets"] = data["buckets"]
+        return result
+
+    for group in groups:
+        group_name = group.get("name", "")
+        for bucket in group.get("buckets", []):
+            b_id = bucket.get("id")
+            if not b_id:
+                continue
+            rem_frac = bucket.get("remaining_fraction")
+            if rem_frac is None:
+                continue
+            rem_pct = round(rem_frac * 100.0, 1)
+            used_pct = round(max(0.0, 100.0 - rem_pct), 1)
+            reset_time = bucket.get("reset_time", "")
+            resets_in = _format_resets_in(reset_time) if reset_time else "Unknown"
+
+            result["buckets"][b_id] = {
+                "id": b_id,
+                "name": bucket.get("name", b_id),
+                "group": group_name,
+                "description": bucket.get("description", ""),
+                "window": bucket.get("window", ""),
+                "remaining_fraction": rem_frac,
+                "used_fraction": round(1.0 - rem_frac, 4),
+                "remaining_pct": rem_pct,
+                "used_pct": used_pct,
+                "reset_time": reset_time,
+                "resets_in": resets_in,
+            }
+
+    return result
+
+
 class GeminiUsageCoordinator(DataUpdateCoordinator):
     """Central coordinator that manages data polling for Gemini Usage Monitor."""
+
 
     def __init__(
         self,
@@ -117,6 +191,7 @@ class GeminiUsageCoordinator(DataUpdateCoordinator):
         self._rate_limit_data: dict[str, dict] = {}
         self._gcp_data: dict[str, dict] = {}
         self._local_data: dict[str, dict] = {}
+        self._antigravity_data: dict[str, Any] = {}
 
     @property
     def is_gcp_configured(self) -> bool:
@@ -151,6 +226,14 @@ class GeminiUsageCoordinator(DataUpdateCoordinator):
         if self.is_local_configured and (now - self._last_local_fetch >= self._local_interval):
             tasks.append(self._fetch_local_usage())
 
+        # Check local agy CLI if available on the system
+        if shutil.which("agy"):
+            agy_data = await self.hass.async_add_executor_job(self._fetch_local_agy_quota)
+            if agy_data:
+                parsed = parse_antigravity_data(agy_data)
+                if parsed.get("buckets"):
+                    self._antigravity_data = parsed
+
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -166,10 +249,38 @@ class GeminiUsageCoordinator(DataUpdateCoordinator):
             "rate_limits": self._rate_limit_data,
             "gcp": self._gcp_data,
             "local": self._local_data,
+            "antigravity": self._antigravity_data,
         }
+
+    async def async_update_antigravity_data(self, raw_data: dict[str, Any]) -> None:
+        """Process incoming Antigravity quota payload (from webhook or external push)."""
+        parsed = parse_antigravity_data(raw_data)
+        if parsed.get("buckets"):
+            self._antigravity_data = parsed
+            self.async_set_updated_data(self._build_data_dict())
+
+    def _fetch_local_agy_quota(self) -> dict[str, Any] | None:
+        """Run local agy CLI to fetch live quota JSON."""
+        try:
+            res = subprocess.run(
+                ["agy", "--print", "/quota", "--output-format", "json"],
+                capture_output=True,
+                text=True,
+                timeout=12,
+                check=True,
+            )
+            return json.loads(res.stdout)
+        except Exception as exc:
+            _LOGGER.debug("Local agy CLI execution failed or timed out: %s", exc)
+            return None
+
 
     async def _fetch_model_list(self) -> None:
         """Fetch full model catalogue from Gemini API and extract context limits."""
+        if not self._api_key:
+            self._api_status = "Ready (Antigravity Quotas)"
+            return
+
         models = []
         page_token = ""
         url_base = f"{GEMINI_MODELS_ENDPOINT}?key={self._api_key}&pageSize=50"
@@ -219,6 +330,11 @@ class GeminiUsageCoordinator(DataUpdateCoordinator):
 
     async def _check_api_health_and_probe(self) -> None:
         """Measure API availability and response latency."""
+        if not self._api_key:
+            self._api_status = "Ready (Antigravity Quotas)"
+            self._last_api_health_fetch = time.monotonic()
+            return
+
         url = f"{GEMINI_MODELS_ENDPOINT}?key={self._api_key}&pageSize=1"
         start_time = time.monotonic()
         try:
@@ -237,6 +353,7 @@ class GeminiUsageCoordinator(DataUpdateCoordinator):
             _LOGGER.debug("API health check connection error: %s", exc)
 
         self._last_api_health_fetch = time.monotonic()
+
 
     async def _fetch_gcp_metrics(self) -> None:
         """Query Google Cloud Monitoring for quota usage and ceilings."""

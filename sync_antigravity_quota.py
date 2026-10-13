@@ -128,6 +128,24 @@ def fetch_quota_from_agy() -> dict[str, Any] | None:
     return None
 
 
+def post_webhook_to_ha(ha_url: str, payload: dict[str, Any]) -> bool:
+    """POST full quota payload to the custom component's webhook endpoint for native entity management."""
+    url = f"{ha_url}/api/webhook/gemini_usage_antigravity_quota"
+    data = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(
+        url,
+        data=data,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            return resp.status in (200, 204)
+    except Exception as exc:
+        _LOGGER.debug("Webhook post to %s failed (native integration may not be loaded yet): %s", url, exc)
+        return False
+
+
 def post_state_to_ha(
     ha_url: str,
     ha_token: str,
@@ -151,6 +169,7 @@ def post_state_to_ha(
     except Exception as exc:
         _LOGGER.error("Failed to post to HA %s: %s", entity_id, exc)
     return False
+
 
 
 def delete_entity_from_ha(ha_url: str, ha_token: str, entity_id: str) -> bool:
@@ -216,10 +235,17 @@ def sync_once(ha_url: str, ha_token: str) -> bool:
         return False
 
     now_iso = datetime.now(timezone.utc).isoformat()
+
+    # 1. Push payload to Home Assistant Custom Component webhook (updates native entities with Unique IDs)
+    webhook_success = post_webhook_to_ha(ha_url, payload)
+    if webhook_success:
+        _LOGGER.debug("Pushed live quota payload to Home Assistant native webhook")
+
     groups = payload.get("command", {}).get("data", {}).get("groups", [])
     if not groups:
         _LOGGER.warning("No quota groups found in agy response")
         return False
+
 
     # Bucket configuration mappings
     bucket_definitions = {

@@ -52,18 +52,23 @@ from homeassistant.data_entry_flow import FlowResult
 
 from .const import (
     CONF_API_KEY,
+    CONF_DISPLAY_MODE,
     CONF_GCP_INTERVAL,
     CONF_GCP_PROJECT_ID,
     CONF_GCP_SERVICE_ACCOUNT_JSON,
     CONF_LOCAL_DB_PATH,
     CONF_LOCAL_INTERVAL,
     CONF_RATE_LIMIT_INTERVAL,
+    DEFAULT_DISPLAY_MODE,
     DEFAULT_GCP_INTERVAL,
     DEFAULT_LOCAL_INTERVAL,
     DEFAULT_RATE_LIMIT_INTERVAL,
+    DISPLAY_MODE_REMAINING,
+    DISPLAY_MODE_USED,
     DOMAIN,
     GEMINI_MODELS_ENDPOINT,
 )
+
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -181,7 +186,12 @@ class GeminiUsageConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            api_key = user_input[CONF_API_KEY].strip()
+            api_key = user_input.get(CONF_API_KEY, "").strip()
+            if not api_key:
+                # Key is optional: users can proceed with Antigravity compute quotas only
+                self._api_key = ""
+                return await self.async_step_gcp()
+
             valid, error_msg = await _validate_api_key(api_key)
             if valid:
                 self._api_key = api_key
@@ -196,9 +206,10 @@ class GeminiUsageConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="user",
             data_schema=vol.Schema(
                 {
-                    vol.Required(CONF_API_KEY): str,
+                    vol.Optional(CONF_API_KEY, default=""): str,
                 }
             ),
+
             errors=errors,
             # Injected into the step description template in strings.json
             # so the UI can display a clickable link to AI Studio.
@@ -406,6 +417,20 @@ class GeminiUsageOptionsFlow(config_entries.OptionsFlow):
             step_id="init",
             data_schema=vol.Schema(
                 {
+                    # --- Quota Display Mode ---
+
+                    vol.Optional(
+                        CONF_DISPLAY_MODE,
+                        default=current.get(
+                            CONF_DISPLAY_MODE,
+                            self._config_entry.data.get(CONF_DISPLAY_MODE, DEFAULT_DISPLAY_MODE),
+                        ),
+                    ): vol.In(
+                        {
+                            DISPLAY_MODE_USED: "Increasing (0% → 100% Used)",
+                            DISPLAY_MODE_REMAINING: "Decreasing (100% → 0% Remaining)",
+                        }
+                    ),
                     # --- Credentials (can be rotated without re-setup) ---
                     vol.Optional(
                         CONF_API_KEY,
@@ -439,3 +464,4 @@ class GeminiUsageOptionsFlow(config_entries.OptionsFlow):
                 }
             ),
         )
+
