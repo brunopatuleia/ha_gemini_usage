@@ -151,12 +151,32 @@ Google presents quotas as **Remaining %** (decreasing from 100% $\rightarrow$ 0%
      * `sensor.antigravity_claude_gpt_weekly_resets_in` (e.g. `1d 17h`)
      * `sensor.antigravity_claude_gpt_5h_resets_in` (e.g. `Now` or `4h 59m`)
 
-3. **Rich Attributes on Every Sensor**
-   Regardless of entity or display mode, every sensor stores:
-   `used_pct`, `remaining_pct`, `used_fraction`, `remaining_fraction`, `reset_time`, `resets_in`, `group`, and `window` in its state attributes for complete templating freedom!
-
-
 ---
+
+## 🔮 Predictive Pace & Quota Runway Engine (Will You Exceed Your Quota?)
+
+Deep in a coding sprint? The integration features a **Predictive Consumption & Runway Engine** that analyzes your real-time coding pace and forecasts whether you are on track to surpass your quota before the window resets.
+
+### How the Prediction Works:
+1. **Live Burn Rate (Velocity)**: Calculated as $\frac{\text{Used } \%}{\text{Elapsed Hours}}$ (e.g. `6.8 %/h`).
+2. **Projected Usage at Reset**: Computes where your quota will land when the reset occurs (e.g. `34%` = Safe, `120%` = Will Exhaust!).
+3. **Runway**: Estimates how many hours of coding you have left until 100% exhaustion at your current pace (e.g. `11h 51m`).
+4. **Over-Quota Risk Binary Sensor**: Instantly turns `on` (`Problem` state) when your current burn rate predicts quota exhaustion before the window refreshes.
+
+### Predictive Entities:
+
+| Entity ID | Friendly Name | Type | Example State |
+| :--- | :--- | :---: | :--- |
+| `sensor.antigravity_gemini_5h_burn_rate` | Gemini 5h — Burn Rate | Sensor | `6.8 %/h` |
+| `sensor.antigravity_gemini_5h_projected` | Gemini 5h — Projected at Reset | Sensor | `34.0 %` |
+| `sensor.antigravity_gemini_5h_runway` | Gemini 5h — Runway | Sensor | `11h 51m` |
+| `sensor.antigravity_gemini_5h_pace` | Gemini 5h — Pace Status | Sensor | `Safe` / `Elevated` / `High Risk (Over Quota)` |
+| `binary_sensor.antigravity_gemini_5h_over_quota_risk` | Gemini 5h — Over-Quota Risk | Binary Sensor | `off` (Safe) / `on` (Warning: Problem!) |
+| `sensor.antigravity_claude_gpt_weekly_burn_rate` | Claude/GPT Weekly — Burn Rate | Sensor | `0.41 %/h` |
+| `sensor.antigravity_claude_gpt_weekly_projected` | Claude/GPT Weekly — Projected | Sensor | `69.0 %` |
+| `sensor.antigravity_claude_gpt_weekly_runway` | Claude/GPT Weekly — Runway | Sensor | `4d 20h` |
+| `binary_sensor.antigravity_claude_gpt_weekly_over_quota_risk` | Claude/GPT Weekly — Over-Quota Risk | Binary Sensor | `off` / `on` |
+
 
 ## 📈 Home Assistant Dashboard Cards
 
@@ -348,6 +368,70 @@ content: >
 ```
 
 ---
+
+### 7. Predictive Runway & Burn Rate Monitor (Pace Alerts)
+Monitors your consumption velocity, projected exhaustion, and runway in a clean glance card:
+
+```yaml
+type: entities
+title: Antigravity Quota Forecast & Runway
+show_header_toggle: false
+entities:
+  - type: section
+    label: Gemini 5-Hour Forecast
+  - entity: sensor.antigravity_gemini_5h_burn_rate
+    name: Consumption Velocity
+  - entity: sensor.antigravity_gemini_5h_projected
+    name: Projected at Reset
+  - entity: sensor.antigravity_gemini_5h_runway
+    name: Time to 100% Exhaustion
+  - entity: sensor.antigravity_gemini_5h_pace
+    name: Current Pace Status
+  - entity: binary_sensor.antigravity_gemini_5h_over_quota_risk
+    name: Over-Quota Warning
+
+  - type: section
+    label: Claude & GPT Weekly Forecast
+  - entity: sensor.antigravity_claude_gpt_weekly_burn_rate
+    name: Consumption Velocity
+  - entity: sensor.antigravity_claude_gpt_weekly_projected
+    name: Projected at Reset
+  - entity: sensor.antigravity_claude_gpt_weekly_runway
+    name: Time to 100% Exhaustion
+  - entity: sensor.antigravity_claude_gpt_weekly_pace
+    name: Current Pace Status
+  - entity: binary_sensor.antigravity_claude_gpt_weekly_over_quota_risk
+    name: Over-Quota Warning
+```
+
+---
+
+## 🚨 Automation Example: Phone Alert on High Burn Rate
+
+Never get cut off mid-code again! Paste this automation into your `automations.yaml` (or via the UI Automation editor) to receive an alert on your phone whenever your coding pace is on track to exhaust your quota before the window resets:
+
+```yaml
+alias: "Antigravity Quota Burn Rate Warning"
+description: "Send push notification when 5-hour Gemini quota is burning too fast"
+trigger:
+  - platform: state
+    entity_id: binary_sensor.antigravity_gemini_5h_over_quota_risk
+    to: "on"
+condition: []
+action:
+  - service: notify.notify
+    data:
+      title: "⚠️ Antigravity Quota Alert"
+      message: >
+        Your Gemini 5-hour quota is burning at {{ states('sensor.antigravity_gemini_5h_burn_rate') }}%/h!
+        At this pace, your quota will exhaust in {{ states('sensor.antigravity_gemini_5h_runway') }}
+        (before the scheduled reset in {{ states('sensor.antigravity_gemini_5h_resets_in') }}).
+        Consider pacing prompts or switching to Gemini Flash.
+mode: single
+```
+
+---
+
 
 ## 🔌 Google AI Studio HACS Integration *(Optional)*
 

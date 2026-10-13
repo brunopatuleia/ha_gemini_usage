@@ -302,6 +302,67 @@ def sync_once(ha_url: str, ha_token: str) -> bool:
             resets_in = format_resets_in(reset_time)
             desc = bucket.get("description") or group_desc
 
+            # Predictive analytics: Burn Rate, Projected Usage, Runway, and Risk
+            window_str = bucket.get("window", "")
+            window_seconds = 5 * 3600 if "5h" in window_str or "5h" in bucket_id else 7 * 86400
+
+            time_to_reset_seconds = 0
+            if reset_time:
+                try:
+                    target_dt = datetime.fromisoformat(reset_time.replace("Z", "+00:00"))
+                    now_dt = datetime.now(timezone.utc)
+                    time_to_reset_seconds = max(0, int((target_dt - now_dt).total_seconds()))
+                except Exception:
+                    time_to_reset_seconds = 0
+
+            elapsed_seconds = max(0, window_seconds - time_to_reset_seconds)
+            elapsed_hours = elapsed_seconds / 3600.0
+            hours_to_reset = time_to_reset_seconds / 3600.0
+
+            if elapsed_hours >= 0.05 and used_pct > 0:
+                burn_rate_pct_per_h = round(used_pct / elapsed_hours, 2)
+            else:
+                burn_rate_pct_per_h = 0.0
+
+            if hours_to_reset > 0 and burn_rate_pct_per_h > 0:
+                projected_pct = round(min(500.0, used_pct + (burn_rate_pct_per_h * hours_to_reset)), 1)
+            else:
+                projected_pct = used_pct
+
+            if burn_rate_pct_per_h > 0 and rem_pct > 0:
+                runway_hours = rem_pct / burn_rate_pct_per_h
+                total_runway_sec = int(runway_hours * 3600)
+                r_days = total_runway_sec // 86400
+                r_hrs = (total_runway_sec % 86400) // 3600
+                r_mins = (total_runway_sec % 3600) // 60
+                if r_days > 0:
+                    runway_str = f"{r_days}d {r_hrs}h"
+                elif r_hrs > 0:
+                    runway_str = f"{r_hrs}h {r_mins}m"
+                else:
+                    runway_str = f"{r_mins}m"
+            elif rem_pct <= 0:
+                runway_hours = 0.0
+                runway_str = "0m (Exhausted)"
+            else:
+                runway_hours = 999.0
+                runway_str = "Sufficient"
+
+            if rem_pct <= 0 or used_pct >= 100:
+                pace_status = "Exhausted"
+                is_over_quota_risk = True
+            elif projected_pct > 100.0 and time_to_reset_seconds > 0:
+                pace_status = "High Risk (Over Quota)"
+                is_over_quota_risk = True
+            elif projected_pct > 80.0:
+                pace_status = "Elevated"
+                is_over_quota_risk = False
+            else:
+                pace_status = "Safe"
+                is_over_quota_risk = False
+
+            safe_pace_pct_per_h = round(rem_pct / hours_to_reset, 2) if hours_to_reset > 0 else 0.0
+
             common_attrs = {
                 "unit_of_measurement": "%",
                 "state_class": "measurement",
@@ -314,6 +375,13 @@ def sync_once(ha_url: str, ha_token: str) -> bool:
                 "window": bucket.get("window", ""),
                 "group": group_name,
                 "description": desc,
+                "burn_rate_pct_per_h": burn_rate_pct_per_h,
+                "projected_pct": projected_pct,
+                "runway": runway_str,
+                "runway_hours": round(runway_hours, 2),
+                "pace_status": pace_status,
+                "is_over_quota_risk": is_over_quota_risk,
+                "safe_pace_pct_per_h": safe_pace_pct_per_h,
                 "last_synced": now_iso,
             }
 
@@ -346,6 +414,93 @@ def sync_once(ha_url: str, ha_token: str) -> bool:
                 "last_synced": now_iso,
             }
             post_state_to_ha(ha_url, ha_token, resets_id, resets_in, attrs_resets)
+
+            # 5. Burn Rate sensor (%/h)
+            burn_id = f"{base_id}_burn_rate"
+            post_state_to_ha(
+                ha_url,
+                ha_token,
+                burn_id,
+                burn_rate_pct_per_h,
+                {
+                    "friendly_name": f"{cfg['name_used']} — Burn Rate",
+                    "unit_of_measurement": "%/h",
+                    "state_class": "measurement",
+                    "icon": "mdi:fire",
+                    "group": group_name,
+                    "last_synced": now_iso,
+                },
+            )
+
+            # 6. Projected Usage at Reset (%)
+            proj_id = f"{base_id}_projected"
+            post_state_to_ha(
+                ha_url,
+                ha_token,
+                proj_id,
+                projected_pct,
+                {
+                    "friendly_name": f"{cfg['name_used']} — Projected at Reset",
+                    "unit_of_measurement": "%",
+                    "state_class": "measurement",
+                    "icon": "mdi:chart-bell-curve-cumulative",
+                    "is_over_quota_risk": is_over_quota_risk,
+                    "group": group_name,
+                    "last_synced": now_iso,
+                },
+            )
+
+            # 7. Quota Runway (Hours remaining until 0%)
+            runway_id = f"{base_id}_runway"
+            post_state_to_ha(
+                ha_url,
+                ha_token,
+                runway_id,
+                runway_str,
+                {
+                    "friendly_name": f"{cfg['name_used']} — Runway",
+                    "icon": "mdi:airplane-takeoff",
+                    "runway_hours": round(runway_hours, 2),
+                    "group": group_name,
+                    "last_synced": now_iso,
+                },
+            )
+
+            # 8. Pace Status sensor
+            pace_id = f"{base_id}_pace"
+            post_state_to_ha(
+                ha_url,
+                ha_token,
+                pace_id,
+                pace_status,
+                {
+                    "friendly_name": f"{cfg['name_used']} — Pace Status",
+                    "icon": "mdi:speedometer",
+                    "is_over_quota_risk": is_over_quota_risk,
+                    "safe_pace_pct_per_h": safe_pace_pct_per_h,
+                    "group": group_name,
+                    "last_synced": now_iso,
+                },
+            )
+
+            # 9. Binary Sensor: Over-quota risk (problem)
+            risk_id = base_id.replace("sensor.", "binary_sensor.") + "_over_quota_risk"
+            post_state_to_ha(
+                ha_url,
+                ha_token,
+                risk_id,
+                "on" if is_over_quota_risk else "off",
+                {
+                    "friendly_name": f"{cfg['name_used']} — Over-Quota Risk",
+                    "device_class": "problem",
+                    "icon": "mdi:alert-circle-outline",
+                    "pace_status": pace_status,
+                    "projected_pct": projected_pct,
+                    "group": group_name,
+                    "last_synced": now_iso,
+                },
+            )
+
 
     # Sync overarching health / status sensor
     post_state_to_ha(

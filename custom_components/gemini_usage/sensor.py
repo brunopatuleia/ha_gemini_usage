@@ -375,7 +375,7 @@ class AntigravityQuotaSensor(CoordinatorEntity, SensorEntity):
         self._attr_unique_id = f"{entry.entry_id}_{sensor_key}"
         self._attr_device_info = _antigravity_device_info(entry)
         self._attr_unit_of_measurement = sensor_def.get("unit")
-        if sensor_def.get("unit") == "%":
+        if sensor_def.get("unit") in ("%", "%/h"):
             self._attr_state_class = SensorStateClass.MEASUREMENT
 
     @property
@@ -404,6 +404,14 @@ class AntigravityQuotaSensor(CoordinatorEntity, SensorEntity):
             return "mdi:timer-sand"
         if sensor_type == "status":
             return "mdi:cloud-check"
+        if sensor_type == "burn_rate":
+            return "mdi:fire"
+        if sensor_type == "projected":
+            return "mdi:chart-bell-curve-cumulative"
+        if sensor_type == "runway":
+            return "mdi:airplane-takeoff"
+        if sensor_type == "pace":
+            return "mdi:speedometer"
         return self._sensor_def.get("icon", "mdi:chart-donut")
 
     @property
@@ -435,6 +443,18 @@ class AntigravityQuotaSensor(CoordinatorEntity, SensorEntity):
         if sensor_type == "resets_in":
             return bucket.get("resets_in")
 
+        if sensor_type == "burn_rate":
+            return bucket.get("burn_rate_pct_per_h")
+
+        if sensor_type == "projected":
+            return bucket.get("projected_pct")
+
+        if sensor_type == "runway":
+            return bucket.get("runway")
+
+        if sensor_type == "pace":
+            return bucket.get("pace_status")
+
         return None
 
     @property
@@ -463,7 +483,15 @@ class AntigravityQuotaSensor(CoordinatorEntity, SensorEntity):
                 "reset_time": bucket.get("reset_time"),
                 "resets_in": bucket.get("resets_in"),
                 "description": bucket.get("description"),
+                "burn_rate_pct_per_h": bucket.get("burn_rate_pct_per_h"),
+                "projected_pct": bucket.get("projected_pct"),
+                "runway": bucket.get("runway"),
+                "runway_hours": bucket.get("runway_hours"),
+                "pace_status": bucket.get("pace_status"),
+                "is_over_quota_risk": bucket.get("is_over_quota_risk"),
+                "safe_pace_pct_per_h": bucket.get("safe_pace_pct_per_h"),
             })
 
         return attrs
+
 

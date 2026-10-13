@@ -27,8 +27,9 @@ Architecture & Dynamic Entity Model:
 DOMAIN = "gemini_usage"
 """Unique domain identifier for this integration (must match custom_components directory name)."""
 
-PLATFORMS = ["sensor"]
+PLATFORMS = ["sensor", "binary_sensor"]
 """Home Assistant entity platforms supported by this integration."""
+
 
 # ---------------------------------------------------------------------------
 # Config entry data / options keys
@@ -410,6 +411,170 @@ ANTIGRAVITY_SENSOR_DEFS: dict[str, dict] = {
         "icon": "mdi:cloud-check",
         "type": "status",
     },
+    # 6. Live Burn Rate Sensors (% / hour)
+    "antigravity_gemini_5h_burn_rate": {
+        "name": "Gemini Models — 5-Hour Burn Rate",
+        "unit": "%/h",
+        "icon": "mdi:fire",
+        "bucket_id": "gemini-5h",
+        "group": "Gemini Models",
+        "type": "burn_rate",
+    },
+    "antigravity_gemini_weekly_burn_rate": {
+        "name": "Gemini Models — Weekly Burn Rate",
+        "unit": "%/h",
+        "icon": "mdi:fire",
+        "bucket_id": "gemini-weekly",
+        "group": "Gemini Models",
+        "type": "burn_rate",
+    },
+    "antigravity_claude_gpt_5h_burn_rate": {
+        "name": "Claude & GPT — 5-Hour Burn Rate",
+        "unit": "%/h",
+        "icon": "mdi:fire",
+        "bucket_id": "3p-5h",
+        "group": "Claude and GPT models",
+        "type": "burn_rate",
+    },
+    "antigravity_claude_gpt_weekly_burn_rate": {
+        "name": "Claude & GPT — Weekly Burn Rate",
+        "unit": "%/h",
+        "icon": "mdi:fire",
+        "bucket_id": "3p-weekly",
+        "group": "Claude and GPT models",
+        "type": "burn_rate",
+    },
+    # 7. Projected Usage at Reset Time (%)
+    "antigravity_gemini_5h_projected": {
+        "name": "Gemini Models — 5-Hour Projected Usage",
+        "unit": "%",
+        "icon": "mdi:chart-bell-curve-cumulative",
+        "bucket_id": "gemini-5h",
+        "group": "Gemini Models",
+        "type": "projected",
+    },
+    "antigravity_gemini_weekly_projected": {
+        "name": "Gemini Models — Weekly Projected Usage",
+        "unit": "%",
+        "icon": "mdi:chart-bell-curve-cumulative",
+        "bucket_id": "gemini-weekly",
+        "group": "Gemini Models",
+        "type": "projected",
+    },
+    "antigravity_claude_gpt_5h_projected": {
+        "name": "Claude & GPT — 5-Hour Projected Usage",
+        "unit": "%",
+        "icon": "mdi:chart-bell-curve-cumulative",
+        "bucket_id": "3p-5h",
+        "group": "Claude and GPT models",
+        "type": "projected",
+    },
+    "antigravity_claude_gpt_weekly_projected": {
+        "name": "Claude & GPT — Weekly Projected Usage",
+        "unit": "%",
+        "icon": "mdi:chart-bell-curve-cumulative",
+        "bucket_id": "3p-weekly",
+        "group": "Claude and GPT models",
+        "type": "projected",
+    },
+    # 8. Quota Runway (Hours left before 100% exhaustion)
+    "antigravity_gemini_5h_runway": {
+        "name": "Gemini Models — 5-Hour Runway",
+        "unit": None,
+        "icon": "mdi:airplane-takeoff",
+        "bucket_id": "gemini-5h",
+        "group": "Gemini Models",
+        "type": "runway",
+    },
+    "antigravity_gemini_weekly_runway": {
+        "name": "Gemini Models — Weekly Runway",
+        "unit": None,
+        "icon": "mdi:airplane-takeoff",
+        "bucket_id": "gemini-weekly",
+        "group": "Gemini Models",
+        "type": "runway",
+    },
+    "antigravity_claude_gpt_5h_runway": {
+        "name": "Claude & GPT — 5-Hour Runway",
+        "unit": None,
+        "icon": "mdi:airplane-takeoff",
+        "bucket_id": "3p-5h",
+        "group": "Claude and GPT models",
+        "type": "runway",
+    },
+    "antigravity_claude_gpt_weekly_runway": {
+        "name": "Claude & GPT — Weekly Runway",
+        "unit": None,
+        "icon": "mdi:airplane-takeoff",
+        "bucket_id": "3p-weekly",
+        "group": "Claude and GPT models",
+        "type": "runway",
+    },
+    # 9. Pace Status
+    "antigravity_gemini_5h_pace": {
+        "name": "Gemini Models — 5-Hour Pace Status",
+        "unit": None,
+        "icon": "mdi:speedometer",
+        "bucket_id": "gemini-5h",
+        "group": "Gemini Models",
+        "type": "pace",
+    },
+    "antigravity_gemini_weekly_pace": {
+        "name": "Gemini Models — Weekly Pace Status",
+        "unit": None,
+        "icon": "mdi:speedometer",
+        "bucket_id": "gemini-weekly",
+        "group": "Gemini Models",
+        "type": "pace",
+    },
+    "antigravity_claude_gpt_5h_pace": {
+        "name": "Claude & GPT — 5-Hour Pace Status",
+        "unit": None,
+        "icon": "mdi:speedometer",
+        "bucket_id": "3p-5h",
+        "group": "Claude and GPT models",
+        "type": "pace",
+    },
+    "antigravity_claude_gpt_weekly_pace": {
+        "name": "Claude & GPT — Weekly Pace Status",
+        "unit": None,
+        "icon": "mdi:speedometer",
+        "bucket_id": "3p-weekly",
+        "group": "Claude and GPT models",
+        "type": "pace",
+    },
 }
+
+# ---------------------------------------------------------------------------
+# Antigravity Binary Sensor definitions (Over-quota risk)
+# ---------------------------------------------------------------------------
+
+ANTIGRAVITY_BINARY_SENSOR_DEFS: dict[str, dict] = {
+    "antigravity_gemini_5h_over_quota_risk": {
+        "name": "Gemini Models — 5-Hour Over-Quota Risk",
+        "icon": "mdi:alert-circle-outline",
+        "bucket_id": "gemini-5h",
+        "group": "Gemini Models",
+    },
+    "antigravity_gemini_weekly_over_quota_risk": {
+        "name": "Gemini Models — Weekly Over-Quota Risk",
+        "icon": "mdi:alert-circle-outline",
+        "bucket_id": "gemini-weekly",
+        "group": "Gemini Models",
+    },
+    "antigravity_claude_gpt_5h_over_quota_risk": {
+        "name": "Claude & GPT — 5-Hour Over-Quota Risk",
+        "icon": "mdi:alert-circle-outline",
+        "bucket_id": "3p-5h",
+        "group": "Claude and GPT models",
+    },
+    "antigravity_claude_gpt_weekly_over_quota_risk": {
+        "name": "Claude & GPT — Weekly Over-Quota Risk",
+        "icon": "mdi:alert-circle-outline",
+        "bucket_id": "3p-weekly",
+        "group": "Claude and GPT models",
+    },
+}
+
 
 
