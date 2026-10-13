@@ -466,6 +466,49 @@ This safely removes unavailable ghost sensors from previous test configurations.
 
 ---
 
+## 🍹 Just For Fun: The Master "Vibe Code This" Prompt
+
+Want to build an end-to-end integration like this without writing a single line of code? 
+
+Pour yourself a cold drink, kick your feet up, fire up **Google Antigravity** (or your favorite frontier agentic coding assistant), and paste a prompt like this:
+
+````markdown
+> **The Prompt**:
+> 
+> "Act as a principal software engineer and Home Assistant core developer. I am vibe-coding this project and will not write a single line of code.
+> 
+> I want to monitor my local AI compute quotas (e.g. from a CLI like `agy --print /quota --output-format json`) in Home Assistant in real time.
+> 
+> Here is what you need to build end-to-end:
+> 1. Reverse-engineer the CLI output and extract all quota buckets, rolling windows (5h, weekly), and ISO reset timestamps.
+> 2. Build a hardened Python daemon that syncs these metrics to Home Assistant every 60s via REST API:
+>    - Use HTTP Keep-Alive connection pooling so it doesn't churn thousands of sockets a day.
+>    - Add a fail-fast circuit breaker so it doesn't hang if Home Assistant restarts.
+>    - Include systemd watchdog (`WatchdogSec=120s`) and graceful SIGTERM handling.
+> 3. Implement a Predictive Runway & Burn Rate Engine:
+>    - Calculate consumption velocity (%/h).
+>    - Forecast projected usage at the reset timestamp.
+>    - Calculate hours of runway remaining until 100% exhaustion.
+>    - Expose a `problem` binary sensor when the projected burn rate exceeds 100%.
+> 4. Give users both display styles:
+>    - Increasing (0% -> 100% Used)
+>    - Decreasing (100% -> 0% Remaining)
+> 5. Create a complete Home Assistant custom integration with config flow, options flow, and webhooks for native Unique IDs and UI management.
+> 6. Design 7 distinct Lovelace dashboard cards (Gauges, Mushroom Pills, Glance, Forecast Runway) and a turnkey phone alert automation.
+> 7. Perform an adversarial multi-agent code review:
+>    - Spawn subagents to audit HA architectural compliance, daemon reliability, mathematical edge cases (zero-division, DST, early-window spikes), and secrets hygiene.
+>    - Fix every identified issue.
+> 8. Package everything with a systemd service unit, Keep a Changelog, and a polished README.
+> 
+> Remember: I am not writing code. Implement everything directly, run live tests, verify in Home Assistant, and let me know when it's done."
+````
+
+> 🍸 **The Vibe Coding Protocol**:  
+> Prompt $\rightarrow$ Sip beverage $\rightarrow$ Review dashboard $\rightarrow$ Ship release 🚀
+
+---
+
 ## 📄 License
 
 This project is licensed under the [MIT License](LICENSE).
+
