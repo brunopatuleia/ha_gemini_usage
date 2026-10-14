@@ -16,7 +16,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 <p align="center">
-  <img src="images/dashboard.png" alt="Antigravity Home Assistant Dashboard" width="850">
+  <img src="images/dashboard_overview_top.png" alt="Antigravity Home Assistant Dashboard" width="850">
 </p>
 
 A real-time monitor for **Google Antigravity** compute limits and **Google Gemini API** quotas in Home Assistant.
@@ -218,60 +218,61 @@ entities:
 
 ---
 
-### 2. Visual Circular Gauges (Color Severity)
-Circular radial gauges with color severity thresholds (Green for low usage, Yellow for moderate, Red when near quota):
+### 2. Visual Circular Gauges (Color Severity & Needle Indicators)
+Circular radial gauges with live needle indicators and color severity thresholds (Green for low usage, Yellow for elevated, Red when approaching quota limits):
+
+<p align="center">
+  <img src="images/dashboard_gauges.png" alt="Antigravity Circular Gauges Preview" width="650">
+</p>
 
 ```yaml
-type: vertical-stack
-title: Antigravity AI Compute Quotas
+type: grid
+columns: 2
+square: false
 cards:
-  - type: grid
-    title: Gemini Models
-    columns: 2
-    square: false
-    cards:
-      - type: gauge
-        entity: sensor.antigravity_gemini_weekly
-        name: Weekly Limit
-        min: 0
-        max: 100
-        severity:
-          green: 0
-          yellow: 70
-          red: 90
-      - type: gauge
-        entity: sensor.antigravity_gemini_5h
-        name: 5-Hour Limit
-        min: 0
-        max: 100
-        severity:
-          green: 0
-          yellow: 70
-          red: 90
+  - type: gauge
+    entity: sensor.antigravity_gemini_5h
+    name: Gemini Models (5-Hour)
+    needle: true
+    min: 0
+    max: 100
+    severity:
+      green: 0
+      yellow: 70
+      red: 85
 
-  - type: grid
-    title: Claude & GPT Models
-    columns: 2
-    square: false
-    cards:
-      - type: gauge
-        entity: sensor.antigravity_claude_gpt_weekly
-        name: Weekly Limit
-        min: 0
-        max: 100
-        severity:
-          green: 0
-          yellow: 70
-          red: 90
-      - type: gauge
-        entity: sensor.antigravity_claude_gpt_5h
-        name: 5-Hour Limit
-        min: 0
-        max: 100
-        severity:
-          green: 0
-          yellow: 70
-          red: 90
+  - type: gauge
+    entity: sensor.antigravity_gemini_weekly
+    name: Gemini Models (Weekly)
+    needle: true
+    min: 0
+    max: 100
+    severity:
+      green: 0
+      yellow: 70
+      red: 85
+
+  - type: gauge
+    entity: sensor.antigravity_claude_gpt_5h
+    name: Claude & GPT (5-Hour)
+    needle: true
+    min: 0
+    max: 100
+    severity:
+      green: 0
+      yellow: 70
+      red: 85
+
+  - type: gauge
+    entity: sensor.antigravity_claude_gpt_weekly
+    name: Claude & GPT (Weekly)
+    needle: true
+    min: 0
+    max: 100
+    severity:
+      green: 0
+      yellow: 70
+      red: 85
 ```
 
 ---
@@ -301,36 +302,63 @@ entities:
 
 ---
 
-### 4. Modern Mushroom Template Cards (Compact Pills)
-If you have [Mushroom Cards](https://github.com/piitaya/lovelace-mushroom) installed, you can render custom subtitle lines with live reset times:
+### 4. Modern Mushroom Template Cards (Compact Pills & Dynamic Badges)
+If you have [Mushroom Cards](https://github.com/piitaya/lovelace-mushroom) installed, you can render modern pill cards with real-time countdowns, dynamic status colors (green/yellow/red), and over-quota warning badges:
+
+<p align="center">
+  <img src="images/dashboard_mushroom.png" alt="Antigravity Mushroom Cards Preview" width="600">
+</p>
 
 ```yaml
 type: vertical-stack
 title: Antigravity Usage
 cards:
+  - type: custom:mushroom-chips-card
+    chips:
+      - type: entity
+        entity: sensor.antigravity_quota_status
+        icon_color: green
+      - type: entity
+        entity: sensor.antigravity_version
+        icon_color: purple
+      - type: template
+        icon: mdi:shield-alert
+        icon_color: "{{ 'red' if is_state('binary_sensor.antigravity_claude_gpt_weekly_over_quota_risk', 'on') else 'green' }}"
+        content: "Claude: {{ states('sensor.antigravity_claude_gpt_weekly_pace') }}"
+      - type: template
+        icon: mdi:shield-check
+        icon_color: green
+        content: "Gemini: {{ states('sensor.antigravity_gemini_weekly_pace') }}"
+
   - type: custom:mushroom-template-card
-    primary: "Gemini Weekly: {{ states('sensor.antigravity_gemini_weekly') }}% Used"
-    secondary: "Resets in {{ states('sensor.antigravity_gemini_weekly_resets_in') }}"
+    primary: Gemini Models — 5-Hour Limit
+    secondary: "{{ states('sensor.antigravity_gemini_5h') }}% used ({{ states('sensor.antigravity_gemini_5h_remaining') }}% left) · Resets in {{ states('sensor.antigravity_gemini_5h_resets_in') }}"
     icon: mdi:google
-    icon_color: blue
+    icon_color: "{{ 'red' if states('sensor.antigravity_gemini_5h')|float(0) > 85 else 'orange' if states('sensor.antigravity_gemini_5h')|float(0) > 70 else 'green' }}"
+    entity: sensor.antigravity_gemini_5h
 
   - type: custom:mushroom-template-card
-    primary: "Gemini 5-Hour: {{ states('sensor.antigravity_gemini_5h') }}% Used"
-    secondary: "Resets in {{ states('sensor.antigravity_gemini_5h_resets_in') }}"
-    icon: mdi:clock-fast
-    icon_color: light-blue
+    primary: Gemini Models — Weekly Quota
+    secondary: "{{ states('sensor.antigravity_gemini_weekly') }}% used · Burn rate: {{ states('sensor.antigravity_gemini_weekly_burn_rate') }}%/h · Resets in {{ states('sensor.antigravity_gemini_weekly_resets_in') }}"
+    icon: mdi:google-cloud
+    icon_color: "{{ 'red' if states('sensor.antigravity_gemini_weekly')|float(0) > 85 else 'orange' if states('sensor.antigravity_gemini_weekly')|float(0) > 70 else 'green' }}"
+    entity: sensor.antigravity_gemini_weekly
 
   - type: custom:mushroom-template-card
-    primary: "Claude & GPT Weekly: {{ states('sensor.antigravity_claude_gpt_weekly') }}% Used"
-    secondary: "Resets in {{ states('sensor.antigravity_claude_gpt_weekly_resets_in') }}"
-    icon: mdi:creation-outline
-    icon_color: orange
+    primary: Claude & GPT — 5-Hour Limit
+    secondary: "{{ states('sensor.antigravity_claude_gpt_5h') }}% used · Resets in {{ states('sensor.antigravity_claude_gpt_5h_resets_in') }}"
+    icon: mdi:brain
+    icon_color: "{{ 'red' if states('sensor.antigravity_claude_gpt_5h')|float(0) > 85 else 'orange' if states('sensor.antigravity_claude_gpt_5h')|float(0) > 70 else 'blue' }}"
+    entity: sensor.antigravity_claude_gpt_5h
 
   - type: custom:mushroom-template-card
-    primary: "Claude & GPT 5-Hour: {{ states('sensor.antigravity_claude_gpt_5h') }}% Used"
-    secondary: "Resets in {{ states('sensor.antigravity_claude_gpt_5h_resets_in') }}"
-    icon: mdi:clock-fast
-    icon_color: purple
+    primary: Claude & GPT — Weekly Quota
+    secondary: "⚠️ {{ states('sensor.antigravity_claude_gpt_weekly') }}% used · Projected: {{ states('sensor.antigravity_claude_gpt_weekly_projected') }}% · Burn: {{ states('sensor.antigravity_claude_gpt_weekly_burn_rate') }}%/h"
+    icon: mdi:alert-decagram
+    icon_color: "{{ 'red' if states('binary_sensor.antigravity_claude_gpt_weekly_over_quota_risk') == 'on' else 'green' }}"
+    badge_icon: "{{ 'mdi:alert' if states('binary_sensor.antigravity_claude_gpt_weekly_over_quota_risk') == 'on' else 'mdi:check' }}"
+    badge_color: "{{ 'red' if states('binary_sensor.antigravity_claude_gpt_weekly_over_quota_risk') == 'on' else 'green' }}"
+    entity: sensor.antigravity_claude_gpt_weekly
 ```
 
 ---
@@ -371,38 +399,107 @@ content: >
 ---
 
 ### 7. Predictive Runway & Burn Rate Monitor (Pace Alerts)
-Monitors your consumption velocity, projected exhaustion, and runway in a clean glance card:
+Monitors your consumption velocity, projected exhaustion at reset, and remaining runway in a clean glance card with real-time risk alerts:
+
+<p align="center">
+  <img src="images/dashboard_runway.png" alt="Antigravity Quota Runway Preview" width="550">
+</p>
 
 ```yaml
 type: entities
-title: Antigravity Quota Forecast & Runway
+title: AI Quota Burn Rate & Depletion Runway
 show_header_toggle: false
 entities:
-  - type: section
-    label: Gemini 5-Hour Forecast
-  - entity: sensor.antigravity_gemini_5h_burn_rate
-    name: Consumption Velocity
-  - entity: sensor.antigravity_gemini_5h_projected
-    name: Projected at Reset
-  - entity: sensor.antigravity_gemini_5h_runway
-    name: Time to 100% Exhaustion
-  - entity: sensor.antigravity_gemini_5h_pace
-    name: Current Pace Status
-  - entity: binary_sensor.antigravity_gemini_5h_over_quota_risk
-    name: Over-Quota Warning
-
-  - type: section
-    label: Claude & GPT Weekly Forecast
-  - entity: sensor.antigravity_claude_gpt_weekly_burn_rate
-    name: Consumption Velocity
-  - entity: sensor.antigravity_claude_gpt_weekly_projected
-    name: Projected at Reset
-  - entity: sensor.antigravity_claude_gpt_weekly_runway
-    name: Time to 100% Exhaustion
-  - entity: sensor.antigravity_claude_gpt_weekly_pace
-    name: Current Pace Status
   - entity: binary_sensor.antigravity_claude_gpt_weekly_over_quota_risk
-    name: Over-Quota Warning
+    name: Claude Over-Quota Risk
+  - entity: sensor.antigravity_claude_gpt_weekly_projected
+    name: Claude Projected by Reset
+  - entity: sensor.antigravity_claude_gpt_weekly_burn_rate
+    name: Claude Burn Rate (%/h)
+  - entity: sensor.antigravity_claude_gpt_weekly_runway
+    name: Claude Time to Depletion
+  - entity: sensor.antigravity_claude_gpt_weekly_pace
+    name: Claude Pace Status
+  - type: divider
+  - entity: binary_sensor.antigravity_gemini_weekly_over_quota_risk
+    name: Gemini Over-Quota Risk
+  - entity: sensor.antigravity_gemini_weekly_projected
+    name: Gemini Projected by Reset
+  - entity: sensor.antigravity_gemini_weekly_burn_rate
+    name: Gemini Burn Rate (%/h)
+  - entity: sensor.antigravity_gemini_weekly_runway
+    name: Gemini Time to Depletion
+  - entity: sensor.antigravity_gemini_weekly_pace
+    name: Gemini Pace Status
+```
+
+---
+
+### 8. Historical 24-Hour Trends & Modern Tile Cards
+Visualize compute burn trends over the last 24 hours with smooth gradient mini-graphs (`mini-graph-card`), paired with Home Assistant's modern color-coded tile cards:
+
+<p align="center">
+  <img src="images/dashboard_overview_bottom.png" alt="Antigravity Historical Trends and Tiles Preview" width="850">
+</p>
+
+```yaml
+# 1. Gemini Historical Usage Curve (requires mini-graph-card from HACS)
+type: custom:mini-graph-card
+name: Gemini Usage (24 Hours)
+icon: mdi:google
+line_width: 3
+hours_to_show: 24
+points_per_hour: 4
+show:
+  graph: line
+  fill: fade
+entities:
+  - entity: sensor.antigravity_gemini_5h
+    name: 5h Limit
+    color: "#4285F4"
+  - entity: sensor.antigravity_gemini_weekly
+    name: Weekly Limit
+    color: "#34A853"
+
+# 2. Claude & GPT Historical Usage Curve
+type: custom:mini-graph-card
+name: Claude & GPT Usage (24 Hours)
+icon: mdi:brain
+line_width: 3
+hours_to_show: 24
+points_per_hour: 4
+show:
+  graph: line
+  fill: fade
+entities:
+  - entity: sensor.antigravity_claude_gpt_5h
+    name: 5h Limit
+    color: "#EA4335"
+  - entity: sensor.antigravity_claude_gpt_weekly
+    name: Weekly Limit
+    color: "#FBBC05"
+
+# 3. Modern Home Assistant Native Tiles
+type: grid
+columns: 2
+square: false
+cards:
+  - type: tile
+    entity: sensor.antigravity_gemini_5h
+    name: Gemini 5h
+    color: blue
+  - type: tile
+    entity: sensor.antigravity_gemini_weekly
+    name: Gemini Wk
+    color: green
+  - type: tile
+    entity: sensor.antigravity_claude_gpt_5h
+    name: Claude 5h
+    color: cyan
+  - type: tile
+    entity: sensor.antigravity_claude_gpt_weekly
+    name: Claude Wk
+    color: red
 ```
 
 ---
