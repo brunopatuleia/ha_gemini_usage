@@ -65,10 +65,10 @@ You **do not need HACS** to use the Antigravity Quota Monitor. It runs on the co
 3. Edit `.env` with your Home Assistant details:
    ```ini
    # Home Assistant URL (local IP, homeassistant.local, or Nabu Casa)
-   HA_URL=http://192.168.1.240:8123
+   HA_URL=http://homeassistant.local:8123
 
    # Paste the Long-Lived Access Token created in Step 1
-   HA_TOKEN=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+   HA_TOKEN=your_long_lived_access_token_here
 
    # Sync interval in seconds (default: 60)
    SYNC_INTERVAL=60
