@@ -1,3 +1,10 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="custom_components/gemini_usage/brand/dark_logo.png">
+    <img src="custom_components/gemini_usage/brand/logo.png" alt="Gemini Usage Monitor Logo" width="380">
+  </picture>
+</p>
+
 # Antigravity & Gemini Usage Monitor for Home Assistant 🚀
 
 > [!IMPORTANT]

@@ -5,6 +5,17 @@ All notable changes to the **Gemini Usage Monitor for Home Assistant** (`ha_gemi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.2] - 2026-10-15
+
+### 🎨 Added
+* **Official Integration Branding & HACS / Home Assistant UI Assets**:
+  * Added complete native branding assets under `custom_components/gemini_usage/brand/` conforming to Home Assistant 2026.3+ local brand proxy API:
+    * `icon.png` (256x256) & `icon@2x.png` (512x512) high-DPI squircle app tile with frosted-glass circular telemetry gauge and Google Gemini gradient sparkle.
+    * `dark_icon.png` & `dark_icon@2x.png` for dark mode optimization.
+    * `logo.png` & `logo@2x.png` (512x160 and 1024x320) landscape brand logos with clean typography for light themes.
+    * `dark_logo.png` & `dark_logo@2x.png` landscape brand logos with crisp high-contrast typography for dark themes.
+  * Eliminates the *"icon not available"* placeholder in Home Assistant **Settings > System > Updates**, **HACS**, and **Settings > Devices & Services**.
+
 ## [1.1.1] - 2026-10-15
 
 ### 🛡️ Fixed

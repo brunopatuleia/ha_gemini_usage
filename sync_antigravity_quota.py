@@ -43,7 +43,7 @@ logging.basicConfig(
 _LOGGER = logging.getLogger("antigravity_ha_sync")
 
 DEFAULT_INTERVAL = 60  # seconds
-VERSION = "1.1.1"
+VERSION = "1.1.2"
 SHUTDOWN_EVENT = threading.Event()
 
 ENV_PATHS = [

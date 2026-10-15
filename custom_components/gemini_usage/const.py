@@ -27,7 +27,7 @@ Architecture & Dynamic Entity Model:
 DOMAIN = "gemini_usage"
 """Unique domain identifier for this integration (must match custom_components directory name)."""
 
-VERSION = "1.1.1"
+VERSION = "1.1.2"
 """Current integration and daemon release version."""
 
 PLATFORMS = ["sensor", "binary_sensor"]
