@@ -27,7 +27,7 @@ Architecture & Dynamic Entity Model:
 DOMAIN = "gemini_usage"
 """Unique domain identifier for this integration (must match custom_components directory name)."""
 
-VERSION = "1.1.0"
+VERSION = "1.1.1"
 """Current integration and daemon release version."""
 
 PLATFORMS = ["sensor", "binary_sensor"]
@@ -280,6 +280,7 @@ ANTIGRAVITY_SENSOR_DEFS: dict[str, dict] = {
         "name_used": "Gemini Models — Weekly Quota Used",
         "name_remaining": "Gemini Models — Weekly Limit Remaining",
         "unit": "%",
+        "state_class": "measurement",
         "icon": "mdi:google",
         "bucket_id": "gemini-weekly",
         "group": "Gemini Models",
@@ -289,6 +290,7 @@ ANTIGRAVITY_SENSOR_DEFS: dict[str, dict] = {
         "name_used": "Gemini Models — Five Hour Quota Used",
         "name_remaining": "Gemini Models — Five Hour Limit Remaining",
         "unit": "%",
+        "state_class": "measurement",
         "icon": "mdi:clock-fast",
         "bucket_id": "gemini-5h",
         "group": "Gemini Models",
@@ -298,6 +300,7 @@ ANTIGRAVITY_SENSOR_DEFS: dict[str, dict] = {
         "name_used": "Claude & GPT — Weekly Quota Used",
         "name_remaining": "Claude & GPT — Weekly Limit Remaining",
         "unit": "%",
+        "state_class": "measurement",
         "icon": "mdi:creation-outline",
         "bucket_id": "3p-weekly",
         "group": "Claude and GPT models",
@@ -307,6 +310,7 @@ ANTIGRAVITY_SENSOR_DEFS: dict[str, dict] = {
         "name_used": "Claude & GPT — Five Hour Quota Used",
         "name_remaining": "Claude & GPT — Five Hour Limit Remaining",
         "unit": "%",
+        "state_class": "measurement",
         "icon": "mdi:clock-fast",
         "bucket_id": "3p-5h",
         "group": "Claude and GPT models",
@@ -316,6 +320,7 @@ ANTIGRAVITY_SENSOR_DEFS: dict[str, dict] = {
     "antigravity_gemini_weekly_used": {
         "name": "Gemini Models — Weekly Quota Used",
         "unit": "%",
+        "state_class": "measurement",
         "icon": "mdi:google",
         "bucket_id": "gemini-weekly",
         "group": "Gemini Models",
@@ -324,6 +329,7 @@ ANTIGRAVITY_SENSOR_DEFS: dict[str, dict] = {
     "antigravity_gemini_5h_used": {
         "name": "Gemini Models — Five Hour Quota Used",
         "unit": "%",
+        "state_class": "measurement",
         "icon": "mdi:clock-fast",
         "bucket_id": "gemini-5h",
         "group": "Gemini Models",
@@ -332,6 +338,7 @@ ANTIGRAVITY_SENSOR_DEFS: dict[str, dict] = {
     "antigravity_claude_gpt_weekly_used": {
         "name": "Claude & GPT — Weekly Quota Used",
         "unit": "%",
+        "state_class": "measurement",
         "icon": "mdi:creation-outline",
         "bucket_id": "3p-weekly",
         "group": "Claude and GPT models",
@@ -340,6 +347,7 @@ ANTIGRAVITY_SENSOR_DEFS: dict[str, dict] = {
     "antigravity_claude_gpt_5h_used": {
         "name": "Claude & GPT — Five Hour Quota Used",
         "unit": "%",
+        "state_class": "measurement",
         "icon": "mdi:clock-fast",
         "bucket_id": "3p-5h",
         "group": "Claude and GPT models",
@@ -349,6 +357,7 @@ ANTIGRAVITY_SENSOR_DEFS: dict[str, dict] = {
     "antigravity_gemini_weekly_remaining": {
         "name": "Gemini Models — Weekly Limit Remaining",
         "unit": "%",
+        "state_class": "measurement",
         "icon": "mdi:google",
         "bucket_id": "gemini-weekly",
         "group": "Gemini Models",
@@ -357,6 +366,7 @@ ANTIGRAVITY_SENSOR_DEFS: dict[str, dict] = {
     "antigravity_gemini_5h_remaining": {
         "name": "Gemini Models — Five Hour Limit Remaining",
         "unit": "%",
+        "state_class": "measurement",
         "icon": "mdi:clock-fast",
         "bucket_id": "gemini-5h",
         "group": "Gemini Models",
@@ -365,6 +375,7 @@ ANTIGRAVITY_SENSOR_DEFS: dict[str, dict] = {
     "antigravity_claude_gpt_weekly_remaining": {
         "name": "Claude & GPT — Weekly Limit Remaining",
         "unit": "%",
+        "state_class": "measurement",
         "icon": "mdi:creation-outline",
         "bucket_id": "3p-weekly",
         "group": "Claude and GPT models",
@@ -373,6 +384,7 @@ ANTIGRAVITY_SENSOR_DEFS: dict[str, dict] = {
     "antigravity_claude_gpt_5h_remaining": {
         "name": "Claude & GPT — Five Hour Limit Remaining",
         "unit": "%",
+        "state_class": "measurement",
         "icon": "mdi:clock-fast",
         "bucket_id": "3p-5h",
         "group": "Claude and GPT models",
@@ -422,6 +434,7 @@ ANTIGRAVITY_SENSOR_DEFS: dict[str, dict] = {
     "antigravity_gemini_5h_burn_rate": {
         "name": "Gemini Models — 5-Hour Burn Rate",
         "unit": "%/h",
+        "state_class": "measurement",
         "icon": "mdi:fire",
         "bucket_id": "gemini-5h",
         "group": "Gemini Models",
@@ -430,6 +443,7 @@ ANTIGRAVITY_SENSOR_DEFS: dict[str, dict] = {
     "antigravity_gemini_weekly_burn_rate": {
         "name": "Gemini Models — Weekly Burn Rate",
         "unit": "%/h",
+        "state_class": "measurement",
         "icon": "mdi:fire",
         "bucket_id": "gemini-weekly",
         "group": "Gemini Models",
@@ -438,6 +452,7 @@ ANTIGRAVITY_SENSOR_DEFS: dict[str, dict] = {
     "antigravity_claude_gpt_5h_burn_rate": {
         "name": "Claude & GPT — 5-Hour Burn Rate",
         "unit": "%/h",
+        "state_class": "measurement",
         "icon": "mdi:fire",
         "bucket_id": "3p-5h",
         "group": "Claude and GPT models",
@@ -446,6 +461,7 @@ ANTIGRAVITY_SENSOR_DEFS: dict[str, dict] = {
     "antigravity_claude_gpt_weekly_burn_rate": {
         "name": "Claude & GPT — Weekly Burn Rate",
         "unit": "%/h",
+        "state_class": "measurement",
         "icon": "mdi:fire",
         "bucket_id": "3p-weekly",
         "group": "Claude and GPT models",
@@ -455,6 +471,7 @@ ANTIGRAVITY_SENSOR_DEFS: dict[str, dict] = {
     "antigravity_gemini_5h_projected": {
         "name": "Gemini Models — 5-Hour Projected Usage",
         "unit": "%",
+        "state_class": "measurement",
         "icon": "mdi:chart-bell-curve-cumulative",
         "bucket_id": "gemini-5h",
         "group": "Gemini Models",
@@ -463,6 +480,7 @@ ANTIGRAVITY_SENSOR_DEFS: dict[str, dict] = {
     "antigravity_gemini_weekly_projected": {
         "name": "Gemini Models — Weekly Projected Usage",
         "unit": "%",
+        "state_class": "measurement",
         "icon": "mdi:chart-bell-curve-cumulative",
         "bucket_id": "gemini-weekly",
         "group": "Gemini Models",
@@ -471,6 +489,7 @@ ANTIGRAVITY_SENSOR_DEFS: dict[str, dict] = {
     "antigravity_claude_gpt_5h_projected": {
         "name": "Claude & GPT — 5-Hour Projected Usage",
         "unit": "%",
+        "state_class": "measurement",
         "icon": "mdi:chart-bell-curve-cumulative",
         "bucket_id": "3p-5h",
         "group": "Claude and GPT models",
@@ -479,6 +498,7 @@ ANTIGRAVITY_SENSOR_DEFS: dict[str, dict] = {
     "antigravity_claude_gpt_weekly_projected": {
         "name": "Claude & GPT — Weekly Projected Usage",
         "unit": "%",
+        "state_class": "measurement",
         "icon": "mdi:chart-bell-curve-cumulative",
         "bucket_id": "3p-weekly",
         "group": "Claude and GPT models",

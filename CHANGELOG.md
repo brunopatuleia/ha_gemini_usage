@@ -5,6 +5,13 @@ All notable changes to the **Gemini Usage Monitor for Home Assistant** (`ha_gemi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.1] - 2026-10-15
+
+### 🛡️ Fixed
+* **Home Assistant Statistics & Repairs Warning (`state_class_removed`)**:
+  * Added `state_class: measurement` (`SensorStateClass.MEASUREMENT`) to all numeric quota, rate, and projected usage sensors across `sync_antigravity_quota.py`, `const.py`, and `sensor.py`.
+  * Resolved the Home Assistant recorder warning *"sensor.antigravity_* no longer has a state class"* in **Settings > System > Repairs**, enabling seamless long-term statistics and history graphs.
+
 ## [1.1.0] - 2026-10-13
 
 ### 🚀 Added

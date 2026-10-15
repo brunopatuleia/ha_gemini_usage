@@ -385,8 +385,23 @@ class AntigravityQuotaSensor(CoordinatorEntity, SensorEntity):
         self._attr_unique_id = f"{entry.entry_id}_{sensor_key}"
         self._attr_device_info = _antigravity_device_info(entry)
         self._attr_unit_of_measurement = sensor_def.get("unit")
-        if sensor_def.get("unit") in ("%", "%/h"):
+        if (
+            sensor_def.get("state_class") == "measurement"
+            or sensor_def.get("unit") in ("%", "%/h")
+            or sensor_def.get("type") in ("dynamic", "used", "remaining", "burn_rate", "projected")
+        ):
             self._attr_state_class = SensorStateClass.MEASUREMENT
+
+    @property
+    def state_class(self) -> SensorStateClass | None:
+        """Return state class for long-term statistics tracking."""
+        if (
+            self._sensor_def.get("state_class") == "measurement"
+            or self._sensor_def.get("unit") in ("%", "%/h")
+            or self._sensor_def.get("type") in ("dynamic", "used", "remaining", "burn_rate", "projected")
+        ):
+            return SensorStateClass.MEASUREMENT
+        return None
 
     @property
     def display_mode(self) -> str:

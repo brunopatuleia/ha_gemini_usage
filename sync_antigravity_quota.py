@@ -43,7 +43,7 @@ logging.basicConfig(
 _LOGGER = logging.getLogger("antigravity_ha_sync")
 
 DEFAULT_INTERVAL = 60  # seconds
-VERSION = "1.1.0"
+VERSION = "1.1.1"
 SHUTDOWN_EVENT = threading.Event()
 
 ENV_PATHS = [
@@ -553,6 +553,7 @@ def sync_once(client: HomeAssistantClient) -> bool:
                 attrs_primary.update({
                     "friendly_name": cfg["name_used"],
                     "unit_of_measurement": "%",
+                    "state_class": "measurement",
                     "icon": cfg["icon"],
                     "remaining_fraction": rem_frac,
                     "used_fraction": round(used_frac, 4),
@@ -567,6 +568,7 @@ def sync_once(client: HomeAssistantClient) -> bool:
                 attrs_used.update({
                     "friendly_name": f"{cfg['name_used']} (Used)",
                     "unit_of_measurement": "%",
+                    "state_class": "measurement",
                     "icon": cfg["icon"],
                     "used_fraction": round(used_frac, 4),
                     "used_pct": used_pct,
@@ -579,6 +581,7 @@ def sync_once(client: HomeAssistantClient) -> bool:
                 attrs_rem.update({
                     "friendly_name": f"{cfg['name_remaining']} (Remaining)",
                     "unit_of_measurement": "%",
+                    "state_class": "measurement",
                     "icon": cfg["icon"],
                     "remaining_fraction": rem_frac,
                     "remaining_pct": rem_pct,
@@ -606,6 +609,7 @@ def sync_once(client: HomeAssistantClient) -> bool:
                     {
                         "friendly_name": f"{group_name} ({bucket.get('window', bucket_id)}) Burn Rate",
                         "unit_of_measurement": "%/h",
+                        "state_class": "measurement",
                         "icon": "mdi:fire",
                         "bucket_id": bucket_id,
                         "safe_pace_pct_per_h": safe_pace_pct_per_h,
@@ -621,6 +625,7 @@ def sync_once(client: HomeAssistantClient) -> bool:
                     {
                         "friendly_name": f"{group_name} ({bucket.get('window', bucket_id)}) Projected Usage",
                         "unit_of_measurement": "%",
+                        "state_class": "measurement",
                         "icon": "mdi:chart-timeline-variant",
                         "bucket_id": bucket_id,
                         "last_synced": now_iso,
