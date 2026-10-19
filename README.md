@@ -13,7 +13,7 @@
 > 
 > 🤖 **AI Agents & Models Used**:
 > * **Google DeepMind Antigravity**: Autonomous agent platform, CLI orchestration, and local daemon integration.
-> * **Google Gemini**: Gemini 3.8 Flash (High), Gemini 2.5 Flash, and Gemini 2.5 Pro.
+> * **Google Gemini**: Gemini 4 Argon (Medium), Gemini 3.8 Flash (High), Gemini 2.5 Flash, and Gemini 2.5 Pro.
 > * **Anthropic Claude**: Claude Opus 5.5 (High), Claude 3.7 Sonnet, and Claude 3.5 Sonnet (via Antigravity).
 > 
 > Every single line of code — from architecture, Home Assistant async coordinators, daemon reverse-engineering, REST state synchronization, and systemd units to Lovelace cards and documentation — was **100% generated, debugged, and implemented by AI**. Use at your own discretion, inspect with curiosity, and community PRs / improvements are warmly welcomed!
@@ -33,8 +33,9 @@ A real-time monitor for **Google Antigravity** compute limits and **Google Gemin
 ## 🌟 What Does This Monitor?
 
 ### 1. Antigravity Compute Quotas (No Google API key required!)
-Monitors your active **Google Antigravity** dual-tier rolling compute capacity:
+Monitors your active **Google Antigravity** rolling compute capacity:
 * **Gemini Models**: Weekly Limit & 5-Hour rolling refresh window
+* **Gemini 4 Argon**: Dedicated Weekly Limit (for paid Pro plans)
 * **Claude & GPT Models**: Weekly Limit & 5-Hour rolling refresh window
 * **Live Reset Timers**: Countdown to reset (e.g., `Resets in 2d 19h` or `3h 16m`)
 * **Two Display Styles**: 
@@ -89,7 +90,7 @@ python3 sync_antigravity_quota.py --once
 ```
 You should see:
 ```text
-[INFO] Successfully synced 36 Antigravity quota sensors to Home Assistant.
+[INFO] Successfully synced 45 Antigravity quota sensors to Home Assistant.
 ```
 
 #### Run permanently as a background service (Linux / systemd):
@@ -121,10 +122,11 @@ These entities dynamically adapt their state and label to your display preferenc
 | :--- | :--- | :---: | :--- |
 | `sensor.antigravity_gemini_weekly` | Gemini Models — Weekly Quota Used | **Used %** | Weekly compute used by Gemini Flash / Pro |
 | `sensor.antigravity_gemini_5h` | Gemini Models — Five Hour Quota Used | **Used %** | 5-Hour rolling compute used by Gemini |
+| `sensor.antigravity_gemini_argon_weekly` | Gemini 4 Argon — Weekly Quota Used | **Used %** | Dedicated weekly compute used by Gemini 4 Argon |
 | `sensor.antigravity_claude_gpt_weekly` | Claude & GPT — Weekly Quota Used | **Used %** | Weekly compute used by Claude Opus / Sonnet / GPT |
 | `sensor.antigravity_claude_gpt_5h` | Claude & GPT — Five Hour Quota Used | **Used %** | 5-Hour rolling compute used by Claude / GPT |
 | `sensor.antigravity_quota_status` | Antigravity Quota Status | `Online` | Connection status and sync heartbeat |
-| `sensor.antigravity_version` | Antigravity Integration Version | `1.1.0` | Installed release version and diagnostics |
+| `sensor.antigravity_version` | Antigravity Integration Version | `1.1.3` | Installed release version and diagnostics |
 
 ---
 
@@ -146,16 +148,19 @@ Google presents quotas as **Remaining %** (decreasing from 100% $\rightarrow$ 0%
    * **Used % Sensors (Always 0% → 100%)**:
      * `sensor.antigravity_gemini_weekly_used`
      * `sensor.antigravity_gemini_5h_used`
+     * `sensor.antigravity_gemini_argon_weekly_used`
      * `sensor.antigravity_claude_gpt_weekly_used`
      * `sensor.antigravity_claude_gpt_5h_used`
    * **Remaining % Sensors (Always 100% → 0%)**:
      * `sensor.antigravity_gemini_weekly_remaining`
      * `sensor.antigravity_gemini_5h_remaining`
+     * `sensor.antigravity_gemini_argon_weekly_remaining`
      * `sensor.antigravity_claude_gpt_weekly_remaining`
      * `sensor.antigravity_claude_gpt_5h_remaining`
    * **Reset Countdown Sensors**:
      * `sensor.antigravity_gemini_weekly_resets_in` (e.g. `2d 18h`)
      * `sensor.antigravity_gemini_5h_resets_in` (e.g. `2h 25m`)
+     * `sensor.antigravity_gemini_argon_weekly_resets_in` (e.g. `6d 22h`)
      * `sensor.antigravity_claude_gpt_weekly_resets_in` (e.g. `1d 17h`)
      * `sensor.antigravity_claude_gpt_5h_resets_in` (e.g. `Now` or `4h 59m`)
 
@@ -180,6 +185,10 @@ Deep in a coding sprint? The integration features a **Predictive Consumption & R
 | `sensor.antigravity_gemini_5h_runway` | Gemini 5h — Runway | Sensor | `11h 51m` |
 | `sensor.antigravity_gemini_5h_pace` | Gemini 5h — Pace Status | Sensor | `Safe` / `Elevated` / `High Risk (Over Quota)` |
 | `binary_sensor.antigravity_gemini_5h_over_quota_risk` | Gemini 5h — Over-Quota Risk | Binary Sensor | `off` (Safe) / `on` (Warning: Problem!) |
+| `sensor.antigravity_gemini_argon_weekly_burn_rate` | Gemini 4 Argon Weekly — Burn Rate | Sensor | `0.25 %/h` |
+| `sensor.antigravity_gemini_argon_weekly_projected` | Gemini 4 Argon Weekly — Projected | Sensor | `42.0 %` |
+| `sensor.antigravity_gemini_argon_weekly_runway` | Gemini 4 Argon Weekly — Runway | Sensor | `15d 20h` |
+| `binary_sensor.antigravity_gemini_argon_weekly_over_quota_risk` | Gemini 4 Argon Weekly — Over-Quota Risk | Binary Sensor | `off` / `on` |
 | `sensor.antigravity_claude_gpt_weekly_burn_rate` | Claude/GPT Weekly — Burn Rate | Sensor | `0.41 %/h` |
 | `sensor.antigravity_claude_gpt_weekly_projected` | Claude/GPT Weekly — Projected | Sensor | `69.0 %` |
 | `sensor.antigravity_claude_gpt_weekly_runway` | Claude/GPT Weekly — Runway | Sensor | `4d 20h` |
@@ -210,6 +219,10 @@ entities:
     name: 5-Hour Quota Used
   - entity: sensor.antigravity_gemini_5h_resets_in
     name: Resets In
+  - entity: sensor.antigravity_gemini_argon_weekly
+    name: Gemini 4 Argon Weekly Used
+  - entity: sensor.antigravity_gemini_argon_weekly_resets_in
+    name: Argon Resets In
 
   - type: section
     label: Claude & GPT Models

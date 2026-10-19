@@ -5,6 +5,18 @@ All notable changes to the **Gemini Usage Monitor for Home Assistant** (`ha_gemi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.3] - 2026-10-19
+
+### 🚀 Added
+* **Gemini 4 Argon Quota Support (`gemini-argon-wtu-weekly`)**:
+  * Added full quota monitoring and predictive analytics support for the **Gemini 4 Argon** model group across `sync_antigravity_quota.py` and `custom_components/gemini_usage/const.py`.
+  * Exposes 9 new Home Assistant entities under the **Google Antigravity** device:
+    * `sensor.antigravity_gemini_argon_weekly` (primary configurable Used % / Remaining % sensor)
+    * `sensor.antigravity_gemini_argon_weekly_used` & `sensor.antigravity_gemini_argon_weekly_remaining`
+    * `sensor.antigravity_gemini_argon_weekly_resets_in` (live reset countdown timer)
+    * `sensor.antigravity_gemini_argon_weekly_burn_rate`, `_projected`, `_runway`, and `_pace`
+    * `binary_sensor.antigravity_gemini_argon_weekly_over_quota_risk` (`problem` alert sensor)
+
 ## [1.1.2] - 2026-10-15
 
 ### 🎨 Added
