@@ -188,10 +188,12 @@ Deep in a coding sprint? The integration features a **Predictive Consumption & R
 | `sensor.antigravity_gemini_argon_weekly_burn_rate` | Gemini 4 Argon Weekly — Burn Rate | Sensor | `0.25 %/h` |
 | `sensor.antigravity_gemini_argon_weekly_projected` | Gemini 4 Argon Weekly — Projected | Sensor | `42.0 %` |
 | `sensor.antigravity_gemini_argon_weekly_runway` | Gemini 4 Argon Weekly — Runway | Sensor | `15d 20h` |
+| `sensor.antigravity_gemini_argon_weekly_pace` | Gemini 4 Argon Weekly — Pace Status | Sensor | `Safe` / `Elevated` / `High Risk (Over Quota)` |
 | `binary_sensor.antigravity_gemini_argon_weekly_over_quota_risk` | Gemini 4 Argon Weekly — Over-Quota Risk | Binary Sensor | `off` / `on` |
 | `sensor.antigravity_claude_gpt_weekly_burn_rate` | Claude/GPT Weekly — Burn Rate | Sensor | `0.41 %/h` |
 | `sensor.antigravity_claude_gpt_weekly_projected` | Claude/GPT Weekly — Projected | Sensor | `69.0 %` |
 | `sensor.antigravity_claude_gpt_weekly_runway` | Claude/GPT Weekly — Runway | Sensor | `4d 20h` |
+| `sensor.antigravity_claude_gpt_weekly_pace` | Claude/GPT Weekly — Pace Status | Sensor | `Safe` / `Elevated` / `High Risk (Over Quota)` |
 | `binary_sensor.antigravity_claude_gpt_weekly_over_quota_risk` | Claude/GPT Weekly — Over-Quota Risk | Binary Sensor | `off` / `on` |
 
 
