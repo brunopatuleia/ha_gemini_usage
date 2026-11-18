@@ -13,7 +13,7 @@
 > 
 > 🤖 **AI Agents & Models Used**:
 > * **Google DeepMind Antigravity**: Autonomous agent platform, CLI orchestration, and local daemon integration.
-> * **Google Gemini**: Gemini 4 Argon (Medium), Gemini 3.8 Flash (High), Gemini 2.5 Flash, and Gemini 2.5 Pro.
+> * **Google Gemini**: Gemini 4 Neon (Medium), Gemini 4 Argon (Medium), Gemini 3.8 Flash (High), Gemini 2.5 Flash, and Gemini 2.5 Pro.
 > * **Anthropic Claude**: Claude Opus 5.5 (High), Claude 3.7 Sonnet, and Claude 3.5 Sonnet (via Antigravity).
 > 
 > Every single line of code — from architecture, Home Assistant async coordinators, daemon reverse-engineering, REST state synchronization, and systemd units to Lovelace cards and documentation — was **100% generated, debugged, and implemented by AI**. Use at your own discretion, inspect with curiosity, and community PRs / improvements are warmly welcomed!
@@ -34,9 +34,10 @@ A real-time monitor for **Google Antigravity** compute limits and **Google Gemin
 
 ### 1. Antigravity Compute Quotas (No Google API key required!)
 Monitors your active **Google Antigravity** rolling compute capacity:
-* **Gemini Models**: Weekly Limit & 5-Hour rolling refresh window
+* **Gemini Models** (*Gemini 4 Neon, Gemini 4 Hydrogen, Orchestrator (Neon), Gemini 3.8 Flash*): Weekly Limit & 5-Hour rolling refresh window
 * **Gemini 4 Argon**: Dedicated Weekly Limit (for paid Pro plans)
-* **Claude & GPT Models**: Weekly Limit & 5-Hour rolling refresh window
+* **Claude & GPT Models** (*Claude Opus 5.5, Claude Sonnet 5.5, GPT-OSS 120B*): Weekly Limit & 5-Hour rolling refresh window
+* **Automatic Dynamic Bucket Discovery**: Any future quota bucket introduced by Antigravity (e.g., *Gemini 4 Carbon* or new Orchestrator pools) is automatically discovered and registered with all 9 sensors — no manual code updates required!
 * **Live Reset Timers**: Countdown to reset (e.g., `Resets in 2d 19h` or `3h 16m`)
 * **Two Display Styles**: 
   * **Quota Used (Increasing)**: 0% $\rightarrow$ 100% (fills up like CPU/RAM usage)
@@ -120,13 +121,16 @@ These entities dynamically adapt their state and label to your display preferenc
 
 | Entity ID | Friendly Name | Default Metric | Description |
 | :--- | :--- | :---: | :--- |
-| `sensor.antigravity_gemini_weekly` | Gemini Models — Weekly Quota Used | **Used %** | Weekly compute used by Gemini Flash / Pro |
-| `sensor.antigravity_gemini_5h` | Gemini Models — Five Hour Quota Used | **Used %** | 5-Hour rolling compute used by Gemini |
+| `sensor.antigravity_gemini_weekly` | Gemini Models — Weekly Quota Used | **Used %** | Weekly compute used by Gemini 4 Neon, Gemini 4 Hydrogen, Orchestrator (Neon) & Gemini 3.8 Flash |
+| `sensor.antigravity_gemini_5h` | Gemini Models — Five Hour Quota Used | **Used %** | 5-Hour rolling compute used by Gemini Models |
 | `sensor.antigravity_gemini_argon_weekly` | Gemini 4 Argon — Weekly Quota Used | **Used %** | Dedicated weekly compute used by Gemini 4 Argon |
-| `sensor.antigravity_claude_gpt_weekly` | Claude & GPT — Weekly Quota Used | **Used %** | Weekly compute used by Claude Opus / Sonnet / GPT |
-| `sensor.antigravity_claude_gpt_5h` | Claude & GPT — Five Hour Quota Used | **Used %** | 5-Hour rolling compute used by Claude / GPT |
+| `sensor.antigravity_claude_gpt_weekly` | Claude & GPT — Weekly Quota Used | **Used %** | Weekly compute used by Claude Opus 5.5, Claude Sonnet 5.5 & GPT-OSS 120B |
+| `sensor.antigravity_claude_gpt_5h` | Claude & GPT — Five Hour Quota Used | **Used %** | 5-Hour rolling compute used by Claude & GPT Models |
 | `sensor.antigravity_quota_status` | Antigravity Quota Status | `Online` | Connection status and sync heartbeat |
-| `sensor.antigravity_version` | Antigravity Integration Version | `1.1.3` | Installed release version and diagnostics |
+| `sensor.antigravity_version` | Antigravity Integration Version | `1.2.0` | Installed release version and diagnostics |
+
+> [!TIP]
+> **Future-Proof Auto-Discovery**: When Antigravity introduces a new quota bucket (e.g. `gemini-carbon-wtu-weekly`), both the sync daemon and the Home Assistant integration automatically generate `sensor.antigravity_<bucket>` along with its `_used`, `_remaining`, `_resets_in`, `_burn_rate`, `_projected`, `_runway`, `_pace`, and `binary_sensor.antigravity_<bucket>_over_quota_risk` entities.
 
 ---
 

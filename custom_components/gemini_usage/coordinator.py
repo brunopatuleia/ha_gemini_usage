@@ -101,6 +101,24 @@ def _format_resets_in(reset_time_iso: str) -> str:
         return "Unknown"
 
 
+def _resolve_window_seconds(window_str: str, bucket_id: str) -> int:
+    """Infer quota window duration in seconds from window string or bucket ID."""
+    combined = f"{(window_str or '').lower().strip()} {(bucket_id or '').lower().strip()}"
+    if "5h" in combined:
+        return 5 * 3600
+    if "daily" in combined or "24h" in combined or "1d" in combined:
+        return 86400
+    if "monthly" in combined or "30d" in combined:
+        return 30 * 86400
+    m_h = re.search(r"(?:^|[\s_-])(\d+)h(?:$|[\s_-])", combined)
+    if m_h:
+        return max(3600, int(m_h.group(1)) * 3600)
+    m_d = re.search(r"(?:^|[\s_-])(\d+)d(?:$|[\s_-])", combined)
+    if m_d:
+        return max(86400, int(m_d.group(1)) * 86400)
+    return 7 * 86400  # Default: weekly (7 days)
+
+
 def parse_antigravity_data(data: dict[str, Any]) -> dict[str, Any]:
     """Parse raw JSON from agy /quota or sync script into structured bucket dict."""
     result: dict[str, Any] = {
@@ -148,7 +166,7 @@ def parse_antigravity_data(data: dict[str, Any]) -> dict[str, Any]:
 
             # Calculate Predictive Burn Rate, Projected Usage, Runway, and Risk
             window_str = bucket.get("window", "")
-            window_seconds = 5 * 3600 if "5h" in window_str or "5h" in b_id else 7 * 86400  # 5h or 7d
+            window_seconds = _resolve_window_seconds(window_str, b_id)
 
             time_to_reset_seconds: int | None = None
             if reset_time:

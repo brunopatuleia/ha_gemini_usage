@@ -41,6 +41,7 @@ from .const import (
     DOMAIN,
     SENSOR_DEFS,
     VERSION,
+    build_dynamic_antigravity_sensor_defs,
 )
 
 
@@ -80,6 +81,8 @@ async def async_setup_entry(
     async_add_entities(aggregate_entities)
 
     # Register Google Antigravity quota sensors (with Unique ID and UI management)
+    antigravity_registry: dict[str, AntigravityQuotaSensor] = {}
+    registered_antigravity_buckets: set[str] = set()
     antigravity_entities: list[AntigravityQuotaSensor] = []
     for sensor_key, sensor_def in ANTIGRAVITY_SENSOR_DEFS.items():
         sensor = AntigravityQuotaSensor(
@@ -88,6 +91,9 @@ async def async_setup_entry(
             sensor_key=sensor_key,
             sensor_def=sensor_def,
         )
+        antigravity_registry[sensor_key] = sensor
+        if sensor_def.get("bucket_id"):
+            registered_antigravity_buckets.add(sensor_def["bucket_id"])
         antigravity_entities.append(sensor)
 
     async_add_entities(antigravity_entities)
@@ -95,14 +101,41 @@ async def async_setup_entry(
 
     @callback
     def _handle_coordinator_update() -> None:
-        """Dynamically create model sensors only for active and populated sources."""
+        """Dynamically create model and Antigravity bucket sensors for active sources."""
         data = coordinator.data or {}
         model_metadata: dict = data.get("model_metadata", {})
         rate_limits: dict = data.get("rate_limits", {})
         gcp: dict = data.get("gcp", {})
         local: dict = data.get("local", {})
+        ag_buckets: dict = data.get("antigravity", {}).get("buckets", {})
 
-        new_entities: list[GeminiModelSensor] = []
+        new_entities: list[SensorEntity] = []
+
+        # 0. Auto-discover any newly introduced Antigravity quota buckets
+        for bucket_id, bucket in ag_buckets.items():
+            if bucket_id in registered_antigravity_buckets:
+                continue
+            dynamic_defs = build_dynamic_antigravity_sensor_defs(bucket_id, bucket)
+            added_for_bucket = 0
+            for sensor_key, sensor_def in dynamic_defs.items():
+                if sensor_key not in antigravity_registry:
+                    sensor = AntigravityQuotaSensor(
+                        coordinator=coordinator,
+                        entry=entry,
+                        sensor_key=sensor_key,
+                        sensor_def=sensor_def,
+                    )
+                    antigravity_registry[sensor_key] = sensor
+                    new_entities.append(sensor)
+                    added_for_bucket += 1
+            registered_antigravity_buckets.add(bucket_id)
+            if added_for_bucket:
+                _LOGGER.info(
+                    "Auto-discovered new Antigravity quota bucket '%s' (%s) — registered %d sensors",
+                    bucket_id,
+                    bucket.get("group", ""),
+                    added_for_bucket,
+                )
 
         # 1. Model capacity & limits (always available from model catalogue)
         for slug in model_metadata:

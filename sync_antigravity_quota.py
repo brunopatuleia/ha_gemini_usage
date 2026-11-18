@@ -17,6 +17,7 @@ import argparse
 import json
 import logging
 import os
+import re
 import shutil
 import signal
 import socket
@@ -43,8 +44,9 @@ logging.basicConfig(
 _LOGGER = logging.getLogger("antigravity_ha_sync")
 
 DEFAULT_INTERVAL = 60  # seconds
-VERSION = "1.1.3"
+VERSION = "1.2.0"
 SHUTDOWN_EVENT = threading.Event()
+_DISCOVERED_DYNAMIC_BUCKETS: set[str] = set()
 
 ENV_PATHS = [
     Path(__file__).parent / ".env",
@@ -89,6 +91,99 @@ BUCKET_DEFINITIONS: dict[str, dict[str, str]] = {
         "group": "Gemini 4 Argon",
     },
 }
+
+
+def build_bucket_slug(bucket_id: str) -> str:
+    """Convert any Antigravity bucket ID into a clean HA-safe entity key.
+
+    Matches custom_components/gemini_usage/const.py::build_antigravity_bucket_slug.
+    """
+    slug = re.sub(r"[^a-z0-9]+", "_", bucket_id.lower()).strip("_")
+    slug = re.sub(r"_wtu_", "_", slug)
+    slug = re.sub(r"_+", "_", slug).strip("_")
+    if not slug:
+        slug = "unknown_bucket"
+    if not slug.startswith("antigravity_"):
+        slug = f"antigravity_{slug}"
+    return slug
+
+
+def resolve_bucket_definition(
+    bucket_id: str,
+    group_name: str = "",
+    bucket_name: str = "",
+    window: str = "",
+) -> dict[str, str]:
+    """Return static bucket config if known, or auto-generate one for new buckets."""
+    if bucket_id in BUCKET_DEFINITIONS:
+        return BUCKET_DEFINITIONS[bucket_id]
+
+    w_lower = (window or "").lower().strip()
+    b_lower = (bucket_id or "").lower().strip()
+    g_clean = (group_name or "").strip()
+    n_clean = (bucket_name or "").strip()
+
+    if "5h" in w_lower or b_lower.endswith("-5h") or "_5h" in b_lower:
+        window_long = "Five Hour"
+    elif "weekly" in w_lower or "week" in w_lower or "weekly" in b_lower:
+        window_long = "Weekly"
+    elif "daily" in w_lower or "24h" in w_lower or "daily" in b_lower:
+        window_long = "Daily"
+    elif "monthly" in w_lower or "30d" in w_lower or "monthly" in b_lower:
+        window_long = "Monthly"
+    elif w_lower:
+        window_long = window.strip().title()
+    else:
+        window_long = ""
+
+    display_group = g_clean or n_clean or re.sub(r"[-_]+", " ", bucket_id).strip().title()
+
+    if window_long == "Five Hour":
+        icon = "mdi:clock-fast"
+    elif "claude" in display_group.lower() or "gpt" in display_group.lower() or b_lower.startswith("3p-"):
+        icon = "mdi:creation-outline"
+    elif "gemini" in display_group.lower() or "gemini" in b_lower:
+        icon = "mdi:atom-variant"
+    else:
+        icon = "mdi:gauge"
+
+    prefix_long = f"{display_group} — {window_long}" if window_long else display_group
+    base_key = build_bucket_slug(bucket_id)
+
+    if bucket_id not in _DISCOVERED_DYNAMIC_BUCKETS:
+        _DISCOVERED_DYNAMIC_BUCKETS.add(bucket_id)
+        _LOGGER.info(
+            "Auto-discovered new Antigravity quota bucket '%s' (%s) -> sensor.%s",
+            bucket_id,
+            display_group,
+            base_key,
+        )
+
+    return {
+        "base_id": f"sensor.{base_key}",
+        "name_used": f"{prefix_long} Quota Used",
+        "name_remaining": f"{prefix_long} Limit Remaining",
+        "icon": icon,
+        "group": display_group,
+    }
+
+
+def _resolve_window_seconds(window_str: str, bucket_id: str) -> int:
+    """Infer quota window duration in seconds from window string or bucket ID."""
+    combined = f"{(window_str or '').lower().strip()} {(bucket_id or '').lower().strip()}"
+    if "5h" in combined:
+        return 5 * 3600
+    if "daily" in combined or "24h" in combined or "1d" in combined:
+        return 86400
+    if "monthly" in combined or "30d" in combined:
+        return 30 * 86400
+    m_h = re.search(r"(?:^|[\s_-])(\d+)h(?:$|[\s_-])", combined)
+    if m_h:
+        return max(3600, int(m_h.group(1)) * 3600)
+    m_d = re.search(r"(?:^|[\s_-])(\d+)d(?:$|[\s_-])", combined)
+    if m_d:
+        return max(86400, int(m_d.group(1)) * 86400)
+    return 7 * 86400  # Default: weekly (7 days)
 
 
 # ---------------------------------------------------------------------------
@@ -440,9 +535,14 @@ def sync_once(client: HomeAssistantClient) -> bool:
             group_desc = group.get("description", "")
             for bucket in group.get("buckets", []):
                 bucket_id = bucket.get("id", "")
-                cfg = BUCKET_DEFINITIONS.get(bucket_id)
-                if not cfg:
+                if not bucket_id:
                     continue
+                cfg = resolve_bucket_definition(
+                    bucket_id=bucket_id,
+                    group_name=group_name,
+                    bucket_name=bucket.get("name", ""),
+                    window=bucket.get("window", ""),
+                )
 
                 # Null-safe extraction and bounds clamping
                 rem_val = bucket.get("remaining_fraction")
@@ -463,7 +563,7 @@ def sync_once(client: HomeAssistantClient) -> bool:
 
                 # Predictive analytics
                 window_str = bucket.get("window", "")
-                window_seconds = 5 * 3600 if "5h" in window_str or "5h" in bucket_id else 7 * 86400
+                window_seconds = _resolve_window_seconds(window_str, bucket_id)
 
                 time_to_reset_seconds: int | None = None
                 if reset_time:

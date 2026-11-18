@@ -16,12 +16,17 @@ from homeassistant.components.binary_sensor import (
     BinarySensorEntity,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import ANTIGRAVITY_BINARY_SENSOR_DEFS, DOMAIN, VERSION
+from .const import (
+    ANTIGRAVITY_BINARY_SENSOR_DEFS,
+    DOMAIN,
+    VERSION,
+    build_dynamic_antigravity_binary_sensor_def,
+)
 from .coordinator import GeminiUsageCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -35,6 +40,8 @@ async def async_setup_entry(
     """Set up Antigravity binary sensor entities from a config entry."""
     coordinator: GeminiUsageCoordinator = getattr(entry, "runtime_data", None) or hass.data[DOMAIN][entry.entry_id]
 
+    binary_registry: dict[str, AntigravityOverQuotaRiskBinarySensor] = {}
+    registered_buckets: set[str] = set()
     entities: list[AntigravityOverQuotaRiskBinarySensor] = []
     for sensor_key, sensor_def in ANTIGRAVITY_BINARY_SENSOR_DEFS.items():
         sensor = AntigravityOverQuotaRiskBinarySensor(
@@ -43,9 +50,44 @@ async def async_setup_entry(
             sensor_key=sensor_key,
             sensor_def=sensor_def,
         )
+        binary_registry[sensor_key] = sensor
+        if sensor_def.get("bucket_id"):
+            registered_buckets.add(sensor_def["bucket_id"])
         entities.append(sensor)
 
     async_add_entities(entities)
+
+    @callback
+    def _handle_coordinator_update() -> None:
+        """Dynamically register over-quota risk binary sensors for new buckets."""
+        data = coordinator.data or {}
+        ag_buckets: dict = data.get("antigravity", {}).get("buckets", {})
+        new_entities: list[AntigravityOverQuotaRiskBinarySensor] = []
+
+        for bucket_id, bucket in ag_buckets.items():
+            if bucket_id in registered_buckets:
+                continue
+            sensor_key, sensor_def = build_dynamic_antigravity_binary_sensor_def(bucket_id, bucket)
+            if sensor_key not in binary_registry:
+                sensor = AntigravityOverQuotaRiskBinarySensor(
+                    coordinator=coordinator,
+                    entry=entry,
+                    sensor_key=sensor_key,
+                    sensor_def=sensor_def,
+                )
+                binary_registry[sensor_key] = sensor
+                new_entities.append(sensor)
+            registered_buckets.add(bucket_id)
+
+        if new_entities:
+            _LOGGER.info(
+                "Auto-discovered %d new Antigravity over-quota risk binary sensor(s)",
+                len(new_entities),
+            )
+            async_add_entities(new_entities)
+
+    entry.async_on_unload(coordinator.async_add_listener(_handle_coordinator_update))
+    _handle_coordinator_update()
 
 
 def _antigravity_device_info(entry: ConfigEntry) -> DeviceInfo:

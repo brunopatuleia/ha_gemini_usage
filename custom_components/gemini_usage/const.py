@@ -24,10 +24,13 @@ Architecture & Dynamic Entity Model:
 # Integration identity
 # ---------------------------------------------------------------------------
 
+import re
+from typing import Any
+
 DOMAIN = "gemini_usage"
 """Unique domain identifier for this integration (must match custom_components directory name)."""
 
-VERSION = "1.1.3"
+VERSION = "1.2.0"
 """Current integration and daemon release version."""
 
 PLATFORMS = ["sensor", "binary_sensor"]
@@ -686,6 +689,195 @@ ANTIGRAVITY_BINARY_SENSOR_DEFS: dict[str, dict] = {
         "group": "Gemini 4 Argon",
     },
 }
+
+
+# ---------------------------------------------------------------------------
+# Dynamic Antigravity Bucket Discovery Helpers
+# ---------------------------------------------------------------------------
+
+def build_antigravity_bucket_slug(bucket_id: str) -> str:
+    """Convert any Antigravity bucket ID into a clean HA-safe entity key.
+
+    Examples:
+        'gemini-carbon-wtu-weekly' -> 'antigravity_gemini_carbon_weekly'
+        'orchestrator-argon-5h'    -> 'antigravity_orchestrator_argon_5h'
+    """
+    slug = re.sub(r"[^a-z0-9]+", "_", bucket_id.lower()).strip("_")
+    # Strip internal telemetry qualifier '_wtu_' to match established naming
+    slug = re.sub(r"_wtu_", "_", slug)
+    slug = re.sub(r"_+", "_", slug).strip("_")
+    if not slug:
+        slug = "unknown_bucket"
+    if not slug.startswith("antigravity_"):
+        slug = f"antigravity_{slug}"
+    return slug
+
+
+def _resolve_antigravity_bucket_meta(
+    bucket_id: str,
+    group_name: str = "",
+    bucket_name: str = "",
+    window: str = "",
+) -> dict[str, str]:
+    """Derive human-friendly display labels and icons for an auto-discovered bucket."""
+    w_lower = (window or "").lower().strip()
+    b_lower = (bucket_id or "").lower().strip()
+    g_clean = (group_name or "").strip()
+    n_clean = (bucket_name or "").strip()
+
+    if "5h" in w_lower or b_lower.endswith("-5h") or "_5h" in b_lower:
+        window_long = "Five Hour"
+        window_short = "5-Hour"
+    elif "weekly" in w_lower or "week" in w_lower or "weekly" in b_lower:
+        window_long = "Weekly"
+        window_short = "Weekly"
+    elif "daily" in w_lower or "24h" in w_lower or "daily" in b_lower:
+        window_long = "Daily"
+        window_short = "Daily"
+    elif "monthly" in w_lower or "30d" in w_lower or "monthly" in b_lower:
+        window_long = "Monthly"
+        window_short = "Monthly"
+    elif w_lower:
+        window_long = window.strip().title()
+        window_short = window.strip().title()
+    else:
+        window_long = ""
+        window_short = ""
+
+    display_group = g_clean or n_clean or re.sub(r"[-_]+", " ", bucket_id).strip().title()
+
+    if window_short == "5-Hour":
+        icon = "mdi:clock-fast"
+    elif "claude" in display_group.lower() or "gpt" in display_group.lower() or b_lower.startswith("3p-"):
+        icon = "mdi:creation-outline"
+    elif "gemini" in display_group.lower() or "gemini" in b_lower:
+        icon = "mdi:atom-variant"
+    else:
+        icon = "mdi:gauge"
+
+    prefix_long = f"{display_group} — {window_long}" if window_long else display_group
+    prefix_short = f"{display_group} — {window_short}" if window_short else display_group
+
+    return {
+        "base_key": build_antigravity_bucket_slug(bucket_id),
+        "group": display_group,
+        "icon": icon,
+        "prefix_long": prefix_long,
+        "prefix_short": prefix_short,
+    }
+
+
+def build_dynamic_antigravity_sensor_defs(
+    bucket_id: str,
+    bucket: dict[str, Any],
+) -> dict[str, dict[str, Any]]:
+    """Generate the full 8-sensor definition set for a dynamically discovered bucket."""
+    meta = _resolve_antigravity_bucket_meta(
+        bucket_id=bucket_id,
+        group_name=str(bucket.get("group", "")),
+        bucket_name=str(bucket.get("name", "")),
+        window=str(bucket.get("window", "")),
+    )
+    base_key = meta["base_key"]
+    group = meta["group"]
+    icon = meta["icon"]
+    prefix_long = meta["prefix_long"]
+    prefix_short = meta["prefix_short"]
+
+    return {
+        base_key: {
+            "name_used": f"{prefix_long} Quota Used",
+            "name_remaining": f"{prefix_long} Limit Remaining",
+            "unit": "%",
+            "state_class": "measurement",
+            "icon": icon,
+            "bucket_id": bucket_id,
+            "group": group,
+            "type": "dynamic",
+        },
+        f"{base_key}_used": {
+            "name": f"{prefix_long} Quota Used",
+            "unit": "%",
+            "state_class": "measurement",
+            "icon": icon,
+            "bucket_id": bucket_id,
+            "group": group,
+            "type": "used",
+        },
+        f"{base_key}_remaining": {
+            "name": f"{prefix_long} Limit Remaining",
+            "unit": "%",
+            "state_class": "measurement",
+            "icon": icon,
+            "bucket_id": bucket_id,
+            "group": group,
+            "type": "remaining",
+        },
+        f"{base_key}_resets_in": {
+            "name": f"{prefix_short} Reset In",
+            "unit": None,
+            "icon": "mdi:timer-sand",
+            "bucket_id": bucket_id,
+            "group": group,
+            "type": "resets_in",
+        },
+        f"{base_key}_burn_rate": {
+            "name": f"{prefix_short} Burn Rate",
+            "unit": "%/h",
+            "state_class": "measurement",
+            "icon": "mdi:fire",
+            "bucket_id": bucket_id,
+            "group": group,
+            "type": "burn_rate",
+        },
+        f"{base_key}_projected": {
+            "name": f"{prefix_short} Projected Usage",
+            "unit": "%",
+            "state_class": "measurement",
+            "icon": "mdi:chart-bell-curve-cumulative",
+            "bucket_id": bucket_id,
+            "group": group,
+            "type": "projected",
+        },
+        f"{base_key}_runway": {
+            "name": f"{prefix_short} Runway",
+            "unit": None,
+            "icon": "mdi:airplane-takeoff",
+            "bucket_id": bucket_id,
+            "group": group,
+            "type": "runway",
+        },
+        f"{base_key}_pace": {
+            "name": f"{prefix_short} Pace Status",
+            "unit": None,
+            "icon": "mdi:speedometer",
+            "bucket_id": bucket_id,
+            "group": group,
+            "type": "pace",
+        },
+    }
+
+
+def build_dynamic_antigravity_binary_sensor_def(
+    bucket_id: str,
+    bucket: dict[str, Any],
+) -> tuple[str, dict[str, Any]]:
+    """Generate the over-quota risk binary sensor definition for a discovered bucket."""
+    meta = _resolve_antigravity_bucket_meta(
+        bucket_id=bucket_id,
+        group_name=str(bucket.get("group", "")),
+        bucket_name=str(bucket.get("name", "")),
+        window=str(bucket.get("window", "")),
+    )
+    sensor_key = f"{meta['base_key']}_over_quota_risk"
+    sensor_def = {
+        "name": f"{meta['prefix_short']} Over-Quota Risk",
+        "icon": "mdi:alert-circle-outline",
+        "bucket_id": bucket_id,
+        "group": meta["group"],
+    }
+    return sensor_key, sensor_def
+
 
 
 

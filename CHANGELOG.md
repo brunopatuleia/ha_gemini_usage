@@ -5,6 +5,19 @@ All notable changes to the **Gemini Usage Monitor for Home Assistant** (`ha_gemi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-11-18
+
+### 🚀 Added
+* **Dynamic Antigravity Bucket Auto-Discovery**:
+  * Both `sync_antigravity_quota.py` and the Home Assistant custom component (`const.py`, `sensor.py`, `binary_sensor.py`) now automatically discover and register any new quota bucket returned by `agy /quota` without requiring hardcoded definitions or code updates.
+  * Automatically provisions the full 9-entity suite (`dynamic`, `_used`, `_remaining`, `_resets_in`, `_burn_rate`, `_projected`, `_runway`, `_pace`, and `binary_sensor.*_over_quota_risk`) with clean, consistent entity slugs (e.g., `gemini-carbon-wtu-weekly` → `sensor.antigravity_gemini_carbon_weekly`).
+  * Existing 5 static buckets retain 100% identical entity IDs and Unique IDs for zero breaking changes.
+* **Flexible Window Duration Parsing**:
+  * Added `_resolve_window_seconds()` across `coordinator.py` and `sync_antigravity_quota.py` to accurately infer burn rate, projected usage, and runway for `5h`, `daily`/`24h`, `weekly`, `monthly`/`30d`, or arbitrary `Nh`/`Nd` quota windows.
+
+### 📝 Updated
+* Updated `README.md` model listings to reflect current Antigravity model groups (**Gemini 4 Neon**, **Gemini 4 Hydrogen**, **Orchestrator (Neon)**, **Gemini 3.8 Flash**, **Gemini 4 Argon**, **Claude Opus 5.5**, **Claude Sonnet 5.5**, and **GPT-OSS 120B**).
+
 ## [1.1.3] - 2026-10-19
 
 ### 🚀 Added
