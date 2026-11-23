@@ -34,10 +34,9 @@ A real-time monitor for **Google Antigravity** compute limits and **Google Gemin
 
 ### 1. Antigravity Compute Quotas (No Google API key required!)
 Monitors your active **Google Antigravity** rolling compute capacity:
-* **Gemini Models** (*Gemini 4 Neon, Gemini 4 Hydrogen, Orchestrator (Neon), Gemini 3.8 Flash*): Weekly Limit & 5-Hour rolling refresh window
-* **Gemini 4 Argon**: Dedicated Weekly Limit (for paid Pro plans)
+* **Gemini Models** (*Gemini 4 Neon, Gemini 4 Carbon, Gemini 4 Argon, Gemini 4 Hydrogen, Orchestrator (Neon / Carbon / Argon), Gemini 3.8 Flash*): Weekly Limit & 5-Hour rolling refresh window
 * **Claude & GPT Models** (*Claude Opus 5.5, Claude Sonnet 5.5, GPT-OSS 120B*): Weekly Limit & 5-Hour rolling refresh window
-* **Automatic Dynamic Bucket Discovery**: Any future quota bucket introduced by Antigravity (e.g., *Gemini 4 Carbon* or new Orchestrator pools) is automatically discovered and registered with all 9 sensors — no manual code updates required!
+* **Automatic Dynamic Bucket Discovery**: Any separate or future quota bucket introduced by Antigravity (e.g., dedicated model pools or new Orchestrator buckets) is automatically discovered and registered with all 9 sensors — no manual code updates required!
 * **Live Reset Timers**: Countdown to reset (e.g., `Resets in 2d 19h` or `3h 16m`)
 * **Two Display Styles**: 
   * **Quota Used (Increasing)**: 0% $\rightarrow$ 100% (fills up like CPU/RAM usage)
@@ -91,7 +90,7 @@ python3 sync_antigravity_quota.py --once
 ```
 You should see:
 ```text
-[INFO] Successfully synced 45 Antigravity quota sensors to Home Assistant.
+[INFO] Successfully synced 36 Antigravity quota sensors to Home Assistant.
 ```
 
 #### Run permanently as a background service (Linux / systemd):
@@ -121,13 +120,12 @@ These entities dynamically adapt their state and label to your display preferenc
 
 | Entity ID | Friendly Name | Default Metric | Description |
 | :--- | :--- | :---: | :--- |
-| `sensor.antigravity_gemini_weekly` | Gemini Models — Weekly Quota Used | **Used %** | Weekly compute used by Gemini 4 Neon, Gemini 4 Hydrogen, Orchestrator (Neon) & Gemini 3.8 Flash |
+| `sensor.antigravity_gemini_weekly` | Gemini Models — Weekly Quota Used | **Used %** | Weekly compute used by Gemini 4 Neon, Carbon, Argon, Hydrogen, Orchestrator & Gemini 3.8 Flash |
 | `sensor.antigravity_gemini_5h` | Gemini Models — Five Hour Quota Used | **Used %** | 5-Hour rolling compute used by Gemini Models |
-| `sensor.antigravity_gemini_argon_weekly` | Gemini 4 Argon — Weekly Quota Used | **Used %** | Dedicated weekly compute used by Gemini 4 Argon |
 | `sensor.antigravity_claude_gpt_weekly` | Claude & GPT — Weekly Quota Used | **Used %** | Weekly compute used by Claude Opus 5.5, Claude Sonnet 5.5 & GPT-OSS 120B |
 | `sensor.antigravity_claude_gpt_5h` | Claude & GPT — Five Hour Quota Used | **Used %** | 5-Hour rolling compute used by Claude & GPT Models |
 | `sensor.antigravity_quota_status` | Antigravity Quota Status | `Online` | Connection status and sync heartbeat |
-| `sensor.antigravity_version` | Antigravity Integration Version | `1.2.0` | Installed release version and diagnostics |
+| `sensor.antigravity_version` | Antigravity Integration Version | `1.2.1` | Installed release version and diagnostics |
 
 > [!TIP]
 > **Future-Proof Auto-Discovery**: When Antigravity introduces a new quota bucket (e.g. `gemini-carbon-wtu-weekly`), both the sync daemon and the Home Assistant integration automatically generate `sensor.antigravity_<bucket>` along with its `_used`, `_remaining`, `_resets_in`, `_burn_rate`, `_projected`, `_runway`, `_pace`, and `binary_sensor.antigravity_<bucket>_over_quota_risk` entities.
@@ -152,19 +150,16 @@ Google presents quotas as **Remaining %** (decreasing from 100% $\rightarrow$ 0%
    * **Used % Sensors (Always 0% → 100%)**:
      * `sensor.antigravity_gemini_weekly_used`
      * `sensor.antigravity_gemini_5h_used`
-     * `sensor.antigravity_gemini_argon_weekly_used`
      * `sensor.antigravity_claude_gpt_weekly_used`
      * `sensor.antigravity_claude_gpt_5h_used`
    * **Remaining % Sensors (Always 100% → 0%)**:
      * `sensor.antigravity_gemini_weekly_remaining`
      * `sensor.antigravity_gemini_5h_remaining`
-     * `sensor.antigravity_gemini_argon_weekly_remaining`
      * `sensor.antigravity_claude_gpt_weekly_remaining`
      * `sensor.antigravity_claude_gpt_5h_remaining`
    * **Reset Countdown Sensors**:
      * `sensor.antigravity_gemini_weekly_resets_in` (e.g. `2d 18h`)
      * `sensor.antigravity_gemini_5h_resets_in` (e.g. `2h 25m`)
-     * `sensor.antigravity_gemini_argon_weekly_resets_in` (e.g. `6d 22h`)
      * `sensor.antigravity_claude_gpt_weekly_resets_in` (e.g. `1d 17h`)
      * `sensor.antigravity_claude_gpt_5h_resets_in` (e.g. `Now` or `4h 59m`)
 
@@ -189,11 +184,11 @@ Deep in a coding sprint? The integration features a **Predictive Consumption & R
 | `sensor.antigravity_gemini_5h_runway` | Gemini 5h — Runway | Sensor | `11h 51m` |
 | `sensor.antigravity_gemini_5h_pace` | Gemini 5h — Pace Status | Sensor | `Safe` / `Elevated` / `High Risk (Over Quota)` |
 | `binary_sensor.antigravity_gemini_5h_over_quota_risk` | Gemini 5h — Over-Quota Risk | Binary Sensor | `off` (Safe) / `on` (Warning: Problem!) |
-| `sensor.antigravity_gemini_argon_weekly_burn_rate` | Gemini 4 Argon Weekly — Burn Rate | Sensor | `0.25 %/h` |
-| `sensor.antigravity_gemini_argon_weekly_projected` | Gemini 4 Argon Weekly — Projected | Sensor | `42.0 %` |
-| `sensor.antigravity_gemini_argon_weekly_runway` | Gemini 4 Argon Weekly — Runway | Sensor | `15d 20h` |
-| `sensor.antigravity_gemini_argon_weekly_pace` | Gemini 4 Argon Weekly — Pace Status | Sensor | `Safe` / `Elevated` / `High Risk (Over Quota)` |
-| `binary_sensor.antigravity_gemini_argon_weekly_over_quota_risk` | Gemini 4 Argon Weekly — Over-Quota Risk | Binary Sensor | `off` / `on` |
+| `sensor.antigravity_gemini_weekly_burn_rate` | Gemini Weekly — Burn Rate | Sensor | `0.25 %/h` |
+| `sensor.antigravity_gemini_weekly_projected` | Gemini Weekly — Projected | Sensor | `42.0 %` |
+| `sensor.antigravity_gemini_weekly_runway` | Gemini Weekly — Runway | Sensor | `15d 20h` |
+| `sensor.antigravity_gemini_weekly_pace` | Gemini Weekly — Pace Status | Sensor | `Safe` / `Elevated` / `High Risk (Over Quota)` |
+| `binary_sensor.antigravity_gemini_weekly_over_quota_risk` | Gemini Weekly — Over-Quota Risk | Binary Sensor | `off` / `on` |
 | `sensor.antigravity_claude_gpt_weekly_burn_rate` | Claude/GPT Weekly — Burn Rate | Sensor | `0.41 %/h` |
 | `sensor.antigravity_claude_gpt_weekly_projected` | Claude/GPT Weekly — Projected | Sensor | `69.0 %` |
 | `sensor.antigravity_claude_gpt_weekly_runway` | Claude/GPT Weekly — Runway | Sensor | `4d 20h` |
@@ -225,10 +220,6 @@ entities:
     name: 5-Hour Quota Used
   - entity: sensor.antigravity_gemini_5h_resets_in
     name: Resets In
-  - entity: sensor.antigravity_gemini_argon_weekly
-    name: Gemini 4 Argon Weekly Used
-  - entity: sensor.antigravity_gemini_argon_weekly_resets_in
-    name: Argon Resets In
 
   - type: section
     label: Claude & GPT Models
@@ -279,17 +270,6 @@ cards:
       red: 85
 
   - type: gauge
-    entity: sensor.antigravity_gemini_argon_weekly
-    name: Gemini 4 Argon (Weekly)
-    needle: true
-    min: 0
-    max: 100
-    severity:
-      green: 0
-      yellow: 70
-      red: 85
-
-  - type: gauge
     entity: sensor.antigravity_claude_gpt_5h
     name: Claude & GPT (5-Hour)
     needle: true
@@ -328,8 +308,6 @@ entities:
     name: Weekly Quota Used
   - entity: sensor.antigravity_gemini_5h
     name: 5-Hour Quota Used
-  - entity: sensor.antigravity_gemini_argon_weekly
-    name: Gemini 4 Argon Weekly Used
 
   - type: section
     label: Claude & GPT Models
@@ -361,10 +339,6 @@ cards:
         entity: sensor.antigravity_version
         icon_color: purple
       - type: template
-        icon: mdi:atom-variant
-        icon_color: "{{ 'red' if is_state('binary_sensor.antigravity_gemini_argon_weekly_over_quota_risk', 'on') else 'purple' }}"
-        content: "Argon: {{ states('sensor.antigravity_gemini_argon_weekly_pace') }}"
-      - type: template
         icon: mdi:shield-check
         icon_color: green
         content: "Gemini: {{ states('sensor.antigravity_gemini_weekly_pace') }}"
@@ -388,13 +362,6 @@ cards:
     entity: sensor.antigravity_gemini_weekly
 
   - type: custom:mushroom-template-card
-    primary: Gemini 4 Argon — Weekly Quota
-    secondary: "{{ states('sensor.antigravity_gemini_argon_weekly') }}% used ({{ states('sensor.antigravity_gemini_argon_weekly_remaining') }}% left) · Burn: {{ states('sensor.antigravity_gemini_argon_weekly_burn_rate') }}%/h · Resets in {{ states('sensor.antigravity_gemini_argon_weekly_resets_in') }}"
-    icon: mdi:atom-variant
-    icon_color: "{{ 'red' if states('sensor.antigravity_gemini_argon_weekly')|float(0) > 85 else 'orange' if states('sensor.antigravity_gemini_argon_weekly')|float(0) > 70 else 'purple' }}"
-    entity: sensor.antigravity_gemini_argon_weekly
-
-  - type: custom:mushroom-template-card
     primary: Claude & GPT — 5-Hour Limit
     secondary: "{{ states('sensor.antigravity_claude_gpt_5h') }}% used · Resets in {{ states('sensor.antigravity_claude_gpt_5h_resets_in') }}"
     icon: mdi:brain
@@ -414,7 +381,7 @@ cards:
 ---
 
 ### 5. Compact Glance Card (Quick Icon Overview)
-A single compact row showing all 5 metrics side by side, perfect for mobile views or header rows:
+A single compact row showing all 4 metrics side by side, perfect for mobile views or header rows:
 
 ```yaml
 type: glance
@@ -424,8 +391,6 @@ entities:
     name: Gemini Wk
   - entity: sensor.antigravity_gemini_5h
     name: Gemini 5h
-  - entity: sensor.antigravity_gemini_argon_weekly
-    name: Argon Wk
   - entity: sensor.antigravity_claude_gpt_weekly
     name: Claude Wk
   - entity: sensor.antigravity_claude_gpt_5h
@@ -444,7 +409,6 @@ content: >
   **Status**: {{ states('sensor.antigravity_quota_status') }}  
   * **Gemini Weekly**: {{ states('sensor.antigravity_gemini_weekly') }}% used (resets in {{ states('sensor.antigravity_gemini_weekly_resets_in') }})  
   * **Gemini 5-Hour**: {{ states('sensor.antigravity_gemini_5h') }}% used (resets in {{ states('sensor.antigravity_gemini_5h_resets_in') }})  
-  * **Gemini 4 Argon Weekly**: {{ states('sensor.antigravity_gemini_argon_weekly') }}% used (resets in {{ states('sensor.antigravity_gemini_argon_weekly_resets_in') }})  
   * **Claude/GPT Weekly**: {{ states('sensor.antigravity_claude_gpt_weekly') }}% used (resets in {{ states('sensor.antigravity_claude_gpt_weekly_resets_in') }})  
   * **Claude/GPT 5-Hour**: {{ states('sensor.antigravity_claude_gpt_5h') }}% used (resets in {{ states('sensor.antigravity_claude_gpt_5h_resets_in') }})
 ```
@@ -463,17 +427,6 @@ type: entities
 title: AI Quota Burn Rate & Depletion Runway
 show_header_toggle: false
 entities:
-  - entity: binary_sensor.antigravity_gemini_argon_weekly_over_quota_risk
-    name: Argon Over-Quota Risk
-  - entity: sensor.antigravity_gemini_argon_weekly_projected
-    name: Argon Projected by Reset
-  - entity: sensor.antigravity_gemini_argon_weekly_burn_rate
-    name: Argon Burn Rate (%/h)
-  - entity: sensor.antigravity_gemini_argon_weekly_runway
-    name: Argon Time to Depletion
-  - entity: sensor.antigravity_gemini_argon_weekly_pace
-    name: Argon Pace Status
-  - type: divider
   - entity: binary_sensor.antigravity_gemini_weekly_over_quota_risk
     name: Gemini Over-Quota Risk
   - entity: sensor.antigravity_gemini_weekly_projected
@@ -507,9 +460,9 @@ Visualize compute burn trends over the last 24 hours with smooth gradient mini-g
 </p>
 
 ```yaml
-# 1. Gemini & Argon Historical Usage Curve (requires mini-graph-card from HACS)
+# 1. Gemini Historical Usage Curve (requires mini-graph-card from HACS)
 type: custom:mini-graph-card
-name: Gemini & Argon Usage (24 Hours)
+name: Gemini Usage (24 Hours)
 icon: mdi:google
 line_width: 3
 hours_to_show: 24
@@ -524,9 +477,6 @@ entities:
   - entity: sensor.antigravity_gemini_weekly
     name: Weekly Limit
     color: "#34A853"
-  - entity: sensor.antigravity_gemini_argon_weekly
-    name: Argon Weekly
-    color: "#A142F4"
 
 # 2. Claude & GPT Historical Usage Curve
 type: custom:mini-graph-card
@@ -559,10 +509,6 @@ cards:
     entity: sensor.antigravity_gemini_weekly
     name: Gemini Wk
     color: green
-  - type: tile
-    entity: sensor.antigravity_gemini_argon_weekly
-    name: Argon Wk
-    color: purple
   - type: tile
     entity: sensor.antigravity_claude_gpt_5h
     name: Claude 5h

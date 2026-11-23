@@ -30,7 +30,7 @@ from typing import Any
 DOMAIN = "gemini_usage"
 """Unique domain identifier for this integration (must match custom_components directory name)."""
 
-VERSION = "1.2.0"
+VERSION = "1.2.1"
 """Current integration and daemon release version."""
 
 PLATFORMS = ["sensor", "binary_sensor"]
@@ -319,16 +319,6 @@ ANTIGRAVITY_SENSOR_DEFS: dict[str, dict] = {
         "group": "Claude and GPT models",
         "type": "dynamic",
     },
-    "antigravity_gemini_argon_weekly": {
-        "name_used": "Gemini 4 Argon — Weekly Quota Used",
-        "name_remaining": "Gemini 4 Argon — Weekly Limit Remaining",
-        "unit": "%",
-        "state_class": "measurement",
-        "icon": "mdi:atom-variant",
-        "bucket_id": "gemini-argon-wtu-weekly",
-        "group": "Gemini 4 Argon",
-        "type": "dynamic",
-    },
     # 2. Dedicated Used % Entities (Always Increasing: 0% -> 100%)
     "antigravity_gemini_weekly_used": {
         "name": "Gemini Models — Weekly Quota Used",
@@ -364,15 +354,6 @@ ANTIGRAVITY_SENSOR_DEFS: dict[str, dict] = {
         "icon": "mdi:clock-fast",
         "bucket_id": "3p-5h",
         "group": "Claude and GPT models",
-        "type": "used",
-    },
-    "antigravity_gemini_argon_weekly_used": {
-        "name": "Gemini 4 Argon — Weekly Quota Used",
-        "unit": "%",
-        "state_class": "measurement",
-        "icon": "mdi:atom-variant",
-        "bucket_id": "gemini-argon-wtu-weekly",
-        "group": "Gemini 4 Argon",
         "type": "used",
     },
     # 3. Dedicated Remaining % Entities (Always Decreasing: 100% -> 0%)
@@ -412,15 +393,6 @@ ANTIGRAVITY_SENSOR_DEFS: dict[str, dict] = {
         "group": "Claude and GPT models",
         "type": "remaining",
     },
-    "antigravity_gemini_argon_weekly_remaining": {
-        "name": "Gemini 4 Argon — Weekly Limit Remaining",
-        "unit": "%",
-        "state_class": "measurement",
-        "icon": "mdi:atom-variant",
-        "bucket_id": "gemini-argon-wtu-weekly",
-        "group": "Gemini 4 Argon",
-        "type": "remaining",
-    },
     # 4. Explicit countdown sensors
     "antigravity_gemini_weekly_resets_in": {
         "name": "Gemini Models — Weekly Reset In",
@@ -452,14 +424,6 @@ ANTIGRAVITY_SENSOR_DEFS: dict[str, dict] = {
         "icon": "mdi:timer-sand",
         "bucket_id": "3p-5h",
         "group": "Claude and GPT models",
-        "type": "resets_in",
-    },
-    "antigravity_gemini_argon_weekly_resets_in": {
-        "name": "Gemini 4 Argon — Weekly Reset In",
-        "unit": None,
-        "icon": "mdi:timer-sand",
-        "bucket_id": "gemini-argon-wtu-weekly",
-        "group": "Gemini 4 Argon",
         "type": "resets_in",
     },
     # 5. Overall Sync Status
@@ -506,15 +470,6 @@ ANTIGRAVITY_SENSOR_DEFS: dict[str, dict] = {
         "group": "Claude and GPT models",
         "type": "burn_rate",
     },
-    "antigravity_gemini_argon_weekly_burn_rate": {
-        "name": "Gemini 4 Argon — Weekly Burn Rate",
-        "unit": "%/h",
-        "state_class": "measurement",
-        "icon": "mdi:fire",
-        "bucket_id": "gemini-argon-wtu-weekly",
-        "group": "Gemini 4 Argon",
-        "type": "burn_rate",
-    },
     # 7. Projected Usage at Reset Time (%)
     "antigravity_gemini_5h_projected": {
         "name": "Gemini Models — 5-Hour Projected Usage",
@@ -552,15 +507,6 @@ ANTIGRAVITY_SENSOR_DEFS: dict[str, dict] = {
         "group": "Claude and GPT models",
         "type": "projected",
     },
-    "antigravity_gemini_argon_weekly_projected": {
-        "name": "Gemini 4 Argon — Weekly Projected Usage",
-        "unit": "%",
-        "state_class": "measurement",
-        "icon": "mdi:chart-bell-curve-cumulative",
-        "bucket_id": "gemini-argon-wtu-weekly",
-        "group": "Gemini 4 Argon",
-        "type": "projected",
-    },
     # 8. Quota Runway (Hours left before 100% exhaustion)
     "antigravity_gemini_5h_runway": {
         "name": "Gemini Models — 5-Hour Runway",
@@ -594,14 +540,6 @@ ANTIGRAVITY_SENSOR_DEFS: dict[str, dict] = {
         "group": "Claude and GPT models",
         "type": "runway",
     },
-    "antigravity_gemini_argon_weekly_runway": {
-        "name": "Gemini 4 Argon — Weekly Runway",
-        "unit": None,
-        "icon": "mdi:airplane-takeoff",
-        "bucket_id": "gemini-argon-wtu-weekly",
-        "group": "Gemini 4 Argon",
-        "type": "runway",
-    },
     # 9. Pace Status
     "antigravity_gemini_5h_pace": {
         "name": "Gemini Models — 5-Hour Pace Status",
@@ -633,14 +571,6 @@ ANTIGRAVITY_SENSOR_DEFS: dict[str, dict] = {
         "icon": "mdi:speedometer",
         "bucket_id": "3p-weekly",
         "group": "Claude and GPT models",
-        "type": "pace",
-    },
-    "antigravity_gemini_argon_weekly_pace": {
-        "name": "Gemini 4 Argon — Weekly Pace Status",
-        "unit": None,
-        "icon": "mdi:speedometer",
-        "bucket_id": "gemini-argon-wtu-weekly",
-        "group": "Gemini 4 Argon",
         "type": "pace",
     },
     # 10. Integration Version & Diagnostics
@@ -681,12 +611,6 @@ ANTIGRAVITY_BINARY_SENSOR_DEFS: dict[str, dict] = {
         "icon": "mdi:alert-circle-outline",
         "bucket_id": "3p-weekly",
         "group": "Claude and GPT models",
-    },
-    "antigravity_gemini_argon_weekly_over_quota_risk": {
-        "name": "Gemini 4 Argon — Weekly Over-Quota Risk",
-        "icon": "mdi:alert-circle-outline",
-        "bucket_id": "gemini-argon-wtu-weekly",
-        "group": "Gemini 4 Argon",
     },
 }
 

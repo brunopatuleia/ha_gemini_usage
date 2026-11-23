@@ -44,7 +44,7 @@ logging.basicConfig(
 _LOGGER = logging.getLogger("antigravity_ha_sync")
 
 DEFAULT_INTERVAL = 60  # seconds
-VERSION = "1.2.0"
+VERSION = "1.2.1"
 SHUTDOWN_EVENT = threading.Event()
 _DISCOVERED_DYNAMIC_BUCKETS: set[str] = set()
 
@@ -82,13 +82,6 @@ BUCKET_DEFINITIONS: dict[str, dict[str, str]] = {
         "name_remaining": "Claude & GPT — Five Hour Limit Remaining",
         "icon": "mdi:clock-fast",
         "group": "Claude and GPT models",
-    },
-    "gemini-argon-wtu-weekly": {
-        "base_id": "sensor.antigravity_gemini_argon_weekly",
-        "name_used": "Gemini 4 Argon — Weekly Quota Used",
-        "name_remaining": "Gemini 4 Argon — Weekly Limit Remaining",
-        "icon": "mdi:atom-variant",
-        "group": "Gemini 4 Argon",
     },
 }
 

@@ -5,6 +5,16 @@ All notable changes to the **Gemini Usage Monitor for Home Assistant** (`ha_gemi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.1] - 2026-11-23
+
+### 🧹 Changed & Fixed
+* **Removed Stale Static `Gemini 4 Argon` Bucket Definitions**:
+  * Google merged the separate `gemini-argon-wtu-weekly` pool into the unified **Gemini Models** (`gemini-weekly`) bucket alongside the **Gemini 4 Neon / Carbon / Hydrogen / Orchestrator** rollout.
+  * Removed the 9 hardcoded `antigravity_gemini_argon_weekly*` static entities from `custom_components/gemini_usage/const.py` and `sync_antigravity_quota.py` so Home Assistant users no longer get permanently `unknown` ghost entities.
+  * Zero breaking risk: if any account still receives `gemini-argon-wtu-weekly` from `agy /quota`, the `v1.2.0` dynamic bucket auto-discovery engine automatically registers all 9 entities with identical IDs.
+* **Updated Documentation & Dashboard Examples**:
+  * Refreshed `README.md` model groups (**Gemini 4 Neon**, **Gemini 4 Carbon**, **Gemini 4 Argon**, **Gemini 4 Hydrogen**, **Orchestrator (Neon / Carbon / Argon)**, **Gemini 3.8 Flash**, **Claude Opus 5.5**, **Claude Sonnet 5.5**, and **GPT-OSS 120B**) and updated all Lovelace YAML snippets to the unified two-pool layout.
+
 ## [1.2.0] - 2026-11-18
 
 ### 🚀 Added
