@@ -13,8 +13,8 @@
 > 
 > 🤖 **AI Agents & Models Used**:
 > * **Google DeepMind Antigravity**: Autonomous agent platform, CLI orchestration, and local daemon integration.
-> * **Google Gemini**: Gemini 4 Neon (Medium), Gemini 4 Argon (Medium), Gemini 3.8 Flash (High), Gemini 2.5 Flash, and Gemini 2.5 Pro.
-> * **Anthropic Claude**: Claude Opus 5.5 (High), Claude 3.7 Sonnet, and Claude 3.5 Sonnet (via Antigravity).
+> * **Google Gemini**: Gemini 4 Neon, Gemini 4 Carbon, Gemini 4 Hydrogen, Gemini 4 Argon, Gemini 3.8 Flash, and Gemini 2.5 Pro/Flash.
+> * **Anthropic Claude**: Claude Opus 5.5, Claude Sonnet 5.5, Claude 3.7 Sonnet, and Claude 3.5 Sonnet (via Antigravity).
 > 
 > Every single line of code — from architecture, Home Assistant async coordinators, daemon reverse-engineering, REST state synchronization, and systemd units to Lovelace cards and documentation — was **100% generated, debugged, and implemented by AI**. Use at your own discretion, inspect with curiosity, and community PRs / improvements are warmly welcomed!
 
@@ -541,12 +541,11 @@ action:
         Your Gemini 5-hour quota is burning at {{ states('sensor.antigravity_gemini_5h_burn_rate') }}%/h!
         At this pace, your quota will exhaust in {{ states('sensor.antigravity_gemini_5h_runway') }}
         (before the scheduled reset in {{ states('sensor.antigravity_gemini_5h_resets_in') }}).
-        Consider pacing prompts or switching to Gemini Flash.
+        Consider pacing prompts or switching to a lighter model.
 mode: single
 ```
 
 ---
-
 
 ## 🔌 Google AI Studio HACS Integration *(Optional)*
 
@@ -571,12 +570,12 @@ If you also develop apps with a direct Google Gemini API Key:
 #### How do I change the update interval?
 Set `SYNC_INTERVAL=<seconds>` in your `.env` file (e.g. `SYNC_INTERVAL=30` for 30-second refreshes) and restart the service.
 
-#### Can I purge stale sensors from earlier test runs?
-Yes! Run:
+#### What happens if Google adds, renames, or merges a quota pool?
+New quota buckets returned by `agy /quota` are **auto-discovered** and registered with all 9 sensors automatically — no update required. If Google retires or merges a separate pool (as happened when **Gemini 4 Argon** was merged into the unified **Gemini Models** pool), run:
 ```bash
 python3 sync_antigravity_quota.py --cleanup-ghosts --once
 ```
-This safely removes unavailable ghost sensors from previous test configurations.
+This safely removes unavailable ghost sensors from previous configurations.
 
 ---
 
