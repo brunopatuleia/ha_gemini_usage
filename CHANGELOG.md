@@ -5,6 +5,16 @@ All notable changes to the **Gemini Usage Monitor for Home Assistant** (`ha_gemi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.2] - 2026-11-24
+
+### 🛡️ Fixed
+* **Untouched Quota Window Handling (`1970-01-01T00:00:00Z`)**:
+  * When a quota pool has not been used since its last reset (`100%` remaining), `agy /quota` returns Unix epoch `1970-01-01T00:00:00Z` as `reset_time`.
+  * Both `sync_antigravity_quota.py` and `custom_components/gemini_usage/coordinator.py` now detect epoch-0 timestamps, display **`Not started`** for `*_resets_in` instead of `"Now"`, clear the dummy `1970-01-01` attribute, and avoid bogus elapsed-window burn-rate math.
+* **Transient `0%` Backend Flicker Protection**:
+  * Added `filter_transient_zero_glitches()` to `sync_antigravity_quota.py` to suppress single-poll transient `0%` readings returned by Google's quota backend before a bucket's scheduled `reset_time`.
+  * Requires 2 consecutive `0%` polls before accepting a premature drop from `>= 5%` used — eliminating false dips in Home Assistant history graphs and preventing accidental clearing of Over-Quota Risk alerts while still picking up real early resets within 2 minutes.
+
 ## [1.2.1] - 2026-11-23
 
 ### 🧹 Changed & Fixed

@@ -84,6 +84,8 @@ def _format_resets_in(reset_time_iso: str) -> str:
         target = datetime.fromisoformat(reset_time_iso.replace("Z", "+00:00"))
         if target.tzinfo is None:
             target = target.replace(tzinfo=timezone.utc)
+        if target.timestamp() <= 0:
+            return "Not started"
         now = datetime.now(timezone.utc)
         diff = target - now
         total_seconds = int(diff.total_seconds())
@@ -174,8 +176,12 @@ def parse_antigravity_data(data: dict[str, Any]) -> dict[str, Any]:
                     target_dt = datetime.fromisoformat(reset_time.replace("Z", "+00:00"))
                     if target_dt.tzinfo is None:
                         target_dt = target_dt.replace(tzinfo=timezone.utc)
-                    now_dt = datetime.now(timezone.utc)
-                    time_to_reset_seconds = max(0, int((target_dt - now_dt).total_seconds()))
+                    if target_dt.timestamp() <= 0:
+                        reset_time = ""
+                        time_to_reset_seconds = None
+                    else:
+                        now_dt = datetime.now(timezone.utc)
+                        time_to_reset_seconds = max(0, int((target_dt - now_dt).total_seconds()))
                 except Exception:
                     time_to_reset_seconds = None
 

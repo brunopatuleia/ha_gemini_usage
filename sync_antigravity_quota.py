@@ -44,9 +44,12 @@ logging.basicConfig(
 _LOGGER = logging.getLogger("antigravity_ha_sync")
 
 DEFAULT_INTERVAL = 60  # seconds
-VERSION = "1.2.1"
+VERSION = "1.2.2"
 SHUTDOWN_EVENT = threading.Event()
 _DISCOVERED_DYNAMIC_BUCKETS: set[str] = set()
+_LAST_GOOD_BUCKETS: dict[str, dict[str, Any]] = {}
+_PENDING_ZERO_COUNTS: dict[str, int] = {}
+TRANSIENT_ZERO_CONFIRM_POLLS = 2
 
 ENV_PATHS = [
     Path(__file__).parent / ".env",
@@ -273,6 +276,8 @@ def format_resets_in(reset_time_iso: str) -> str:
         target = datetime.fromisoformat(reset_time_iso.replace("Z", "+00:00"))
         if target.tzinfo is None:
             target = target.replace(tzinfo=timezone.utc)
+        if target.timestamp() <= 0:
+            return "Not started"
         now = datetime.now(timezone.utc)
         diff = target - now
         total_seconds = int(diff.total_seconds())
@@ -488,6 +493,85 @@ def cleanup_vibe_coded_ghost_sensors(client: HomeAssistantClient) -> int:
 # Core Synchronization Logic with Circuit Breaker
 # ---------------------------------------------------------------------------
 
+def _parse_iso_utc(ts: str) -> datetime | None:
+    """Parse an ISO-8601 timestamp into a timezone-aware UTC datetime, or None if invalid/epoch-0."""
+    if not ts:
+        return None
+    try:
+        dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        if dt.timestamp() <= 0:
+            return None
+        return dt
+    except Exception:
+        return None
+
+
+def filter_transient_zero_glitches(payload: dict[str, Any]) -> dict[str, Any]:
+    """Suppress single-poll transient 0% readings before a bucket's scheduled reset.
+
+    Google's quota backend occasionally returns a transient 100%-remaining (0% used)
+    response for a single poll during shard propagation. Requiring consecutive
+    confirmations before accepting a premature drop to 0% prevents false dips in
+    Home Assistant history graphs while still accepting real early resets promptly.
+    """
+    groups = payload.get("command", {}).get("data", {}).get("groups", [])
+    if not groups:
+        return payload
+
+    now_dt = datetime.now(timezone.utc)
+    for group in groups:
+        buckets = group.get("buckets")
+        if not isinstance(buckets, list):
+            continue
+        for idx, bucket in enumerate(buckets):
+            bucket_id = bucket.get("id", "")
+            if not bucket_id:
+                continue
+            rem_val = bucket.get("remaining_fraction")
+            try:
+                rem_frac = max(0.0, min(1.0, float(rem_val))) if rem_val is not None else 0.0
+            except (ValueError, TypeError):
+                rem_frac = 0.0
+            used_pct = round((1.0 - rem_frac) * 100.0, 1)
+
+            if used_pct <= 0.1 and bucket_id in _LAST_GOOD_BUCKETS:
+                prev_bucket = _LAST_GOOD_BUCKETS[bucket_id]
+                prev_reset_dt = _parse_iso_utc(prev_bucket.get("reset_time", ""))
+                if prev_reset_dt is not None and prev_reset_dt > now_dt:
+                    count = _PENDING_ZERO_COUNTS.get(bucket_id, 0) + 1
+                    _PENDING_ZERO_COUNTS[bucket_id] = count
+                    if count < TRANSIENT_ZERO_CONFIRM_POLLS:
+                        prev_used = round((1.0 - float(prev_bucket.get("remaining_fraction", 1.0))) * 100.0, 1)
+                        _LOGGER.info(
+                            "Transient 0%% reading for '%s' before scheduled reset (%s) — "
+                            "holding previous value (%.1f%%) pending confirmation (%d/%d)",
+                            bucket_id,
+                            prev_bucket.get("reset_time", ""),
+                            prev_used,
+                            count,
+                            TRANSIENT_ZERO_CONFIRM_POLLS,
+                        )
+                        buckets[idx] = dict(prev_bucket)
+                        continue
+                    _LOGGER.info(
+                        "Confirmed early reset for '%s' after %d consecutive 0%% polls",
+                        bucket_id,
+                        count,
+                    )
+                _LAST_GOOD_BUCKETS.pop(bucket_id, None)
+                _PENDING_ZERO_COUNTS.pop(bucket_id, None)
+            else:
+                _PENDING_ZERO_COUNTS.pop(bucket_id, None)
+                if used_pct >= 5.0:
+                    cur_reset_dt = _parse_iso_utc(bucket.get("reset_time", ""))
+                    if cur_reset_dt is not None and cur_reset_dt > now_dt:
+                        _LAST_GOOD_BUCKETS[bucket_id] = dict(bucket)
+
+    return payload
+
+
 def sync_once(client: HomeAssistantClient) -> bool:
     """Fetch current quota and publish all sensors with fail-fast circuit breaker."""
     payload = fetch_quota_from_agy()
@@ -508,6 +592,9 @@ def sync_once(client: HomeAssistantClient) -> bool:
         except HomeAssistantUnreachableError:
             pass
         return False
+
+    # Filter out single-poll transient 0% backend shard glitches before publishing
+    payload = filter_transient_zero_glitches(payload)
 
     # 1. Push payload to Home Assistant Custom Component webhook
     try:
@@ -564,8 +651,12 @@ def sync_once(client: HomeAssistantClient) -> bool:
                         target_dt = datetime.fromisoformat(reset_time.replace("Z", "+00:00"))
                         if target_dt.tzinfo is None:
                             target_dt = target_dt.replace(tzinfo=timezone.utc)
-                        now_dt = datetime.now(timezone.utc)
-                        time_to_reset_seconds = max(0, int((target_dt - now_dt).total_seconds()))
+                        if target_dt.timestamp() <= 0:
+                            reset_time = ""
+                            time_to_reset_seconds = None
+                        else:
+                            now_dt = datetime.now(timezone.utc)
+                            time_to_reset_seconds = max(0, int((target_dt - now_dt).total_seconds()))
                     except Exception:
                         time_to_reset_seconds = None
 
