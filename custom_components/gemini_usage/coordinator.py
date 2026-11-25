@@ -190,10 +190,12 @@ def parse_antigravity_data(data: dict[str, Any]) -> dict[str, Any]:
                 elapsed_hours = elapsed_seconds / 3600.0
                 hours_to_reset = time_to_reset_seconds / 3600.0
 
-                # Minimum observation window: at least 15m or 2% of total window to prevent early spikes
-                min_obs_hours = max(0.25, (window_seconds * 0.02) / 3600.0)
-                if elapsed_hours >= min_obs_hours and used_pct > 0:
-                    burn_rate_pct_per_h = round(used_pct / elapsed_hours, 2)
+                # Smooth early-window damping: avoid 0-rate dead zones (e.g. 3.36h on weekly)
+                # and early-burst spikes by using at least 20% of the window (min 1h) as denominator.
+                damp_hours = max(1.0, (window_seconds * 0.20) / 3600.0)
+                if elapsed_seconds > 0 and used_pct > 0:
+                    effective_hours = max(elapsed_hours, damp_hours)
+                    burn_rate_pct_per_h = round(used_pct / effective_hours, 2)
                 else:
                     burn_rate_pct_per_h = 0.0
             else:

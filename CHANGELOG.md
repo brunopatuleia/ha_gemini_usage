@@ -5,6 +5,16 @@ All notable changes to the **Gemini Usage Monitor for Home Assistant** (`ha_gemi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.3] - 2026-11-25
+
+### 🚀 Added & Fixed
+* **Smooth Early-Window Burn Rate & Projection Damping**:
+  * Replaced the hard `min_obs_hours` cutoff (`max(0.25, 2% of window)`) in `sync_antigravity_quota.py` and `custom_components/gemini_usage/coordinator.py` with smooth early-window damping (`damp_hours = max(1.0, 20% of window)`).
+  * Eliminates the `3.36h` dead zone on weekly quotas where `projected_pct` stayed stuck at `used_pct` (e.g., `13% → 13%`), while preventing early-burst spikes (e.g., `26% → 203%` on 5h windows).
+* **KWGT Widget & Read-Only JSON Quota Feeds**:
+  * Added `/api/gemini_usage/quota.json` (`AntigravityQuotaJsonView` in `__init__.py`) and the local `--json-port 8787` `/quota.json` feed in `sync_antigravity_quota.py`.
+  * Added `kwgt/build_kwgt.py`, `kwgt/Antigravity_Quota.kwgt`, and `kwgt/README.md` for Android home-screen quota widgets.
+
 ## [1.2.2] - 2026-11-24
 
 ### 🛡️ Fixed

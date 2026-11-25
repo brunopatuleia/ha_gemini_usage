@@ -125,7 +125,7 @@ These entities dynamically adapt their state and label to your display preferenc
 | `sensor.antigravity_claude_gpt_weekly` | Claude & GPT — Weekly Quota Used | **Used %** | Weekly compute used by Claude Opus 5.5, Claude Sonnet 5.5 & GPT-OSS 120B |
 | `sensor.antigravity_claude_gpt_5h` | Claude & GPT — Five Hour Quota Used | **Used %** | 5-Hour rolling compute used by Claude & GPT Models |
 | `sensor.antigravity_quota_status` | Antigravity Quota Status | `Online` | Connection status and sync heartbeat |
-| `sensor.antigravity_version` | Antigravity Integration Version | `1.2.2` | Installed release version and diagnostics |
+| `sensor.antigravity_version` | Antigravity Integration Version | `1.2.3` | Installed release version and diagnostics |
 
 > [!TIP]
 > **Future-Proof Auto-Discovery**: When Antigravity introduces a new quota bucket (e.g. `gemini-carbon-wtu-weekly`), both the sync daemon and the Home Assistant integration automatically generate `sensor.antigravity_<bucket>` along with its `_used`, `_remaining`, `_resets_in`, `_burn_rate`, `_projected`, `_runway`, `_pace`, and `binary_sensor.antigravity_<bucket>_over_quota_risk` entities.

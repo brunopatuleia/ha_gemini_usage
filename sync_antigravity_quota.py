@@ -14,6 +14,7 @@ and graceful signal handling.
 from __future__ import annotations
 
 import argparse
+import hmac
 import json
 import logging
 import os
@@ -26,8 +27,10 @@ import sys
 import threading
 import time
 from datetime import datetime, timezone
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qs, urlparse
 
 try:
     import requests
@@ -44,12 +47,19 @@ logging.basicConfig(
 _LOGGER = logging.getLogger("antigravity_ha_sync")
 
 DEFAULT_INTERVAL = 60  # seconds
-VERSION = "1.2.2"
+DEFAULT_JSON_PORT = 8787
+VERSION = "1.2.3"
 SHUTDOWN_EVENT = threading.Event()
 _DISCOVERED_DYNAMIC_BUCKETS: set[str] = set()
 _LAST_GOOD_BUCKETS: dict[str, dict[str, Any]] = {}
 _PENDING_ZERO_COUNTS: dict[str, int] = {}
 TRANSIENT_ZERO_CONFIRM_POLLS = 2
+_QUOTA_SNAPSHOT_LOCK = threading.Lock()
+_QUOTA_SNAPSHOT: dict[str, Any] = {
+    "status": "Starting",
+    "last_synced": None,
+    "buckets": {},
+}
 
 ENV_PATHS = [
     Path(__file__).parent / ".env",
@@ -247,6 +257,73 @@ def get_config() -> tuple[str, str, int]:
     )
 
     return ha_url, ha_token, interval
+
+
+def get_json_server_config() -> tuple[int, str]:
+    """Resolve optional local JSON server port and read token."""
+    env_file_vars = load_env_file()
+    raw_port = (
+        os.environ.get("QUOTA_JSON_PORT")
+        or env_file_vars.get("QUOTA_JSON_PORT")
+        or str(DEFAULT_JSON_PORT)
+    )
+    try:
+        port = int(raw_port)
+    except ValueError:
+        port = DEFAULT_JSON_PORT
+    token = (
+        os.environ.get("QUOTA_JSON_TOKEN")
+        or env_file_vars.get("QUOTA_JSON_TOKEN")
+        or ""
+    )
+    return port, token
+
+
+def _update_quota_snapshot(status: str, last_synced: str, buckets: dict[str, Any] | None = None) -> None:
+    """Update thread-safe in-memory quota snapshot for the JSON widget endpoint."""
+    with _QUOTA_SNAPSHOT_LOCK:
+        _QUOTA_SNAPSHOT["status"] = status
+        _QUOTA_SNAPSHOT["last_synced"] = last_synced
+        if buckets is not None:
+            _QUOTA_SNAPSHOT["buckets"] = buckets
+
+
+def start_quota_http_server(port: int, token: str = "") -> ThreadingHTTPServer:
+    """Start a lightweight read-only HTTP server exposing /quota.json for KWGT."""
+
+    class _QuotaHandler(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:  # noqa: N802
+            parsed = urlparse(self.path)
+            if parsed.path not in ("/", "/quota.json"):
+                self.send_error(404, "Not Found")
+                return
+
+            if token:
+                qs_token = (parse_qs(parsed.query).get("token") or [""])[0]
+                hdr_token = self.headers.get("X-Quota-Token", "")
+                provided = qs_token or hdr_token
+                if not hmac.compare_digest(provided, token):
+                    self.send_error(401, "Unauthorized")
+                    return
+
+            with _QUOTA_SNAPSHOT_LOCK:
+                body = json.dumps(_QUOTA_SNAPSHOT, ensure_ascii=False).encode("utf-8")
+
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, format: str, *args: Any) -> None:  # noqa: A002
+            _LOGGER.debug("Quota JSON HTTP: " + format, *args)
+
+    server = ThreadingHTTPServer(("0.0.0.0", port), _QuotaHandler)
+    thread = threading.Thread(target=server.serve_forever, name="quota-json-http", daemon=True)
+    thread.start()
+    _LOGGER.info("Serving read-only KWGT JSON feed at http://0.0.0.0:%d/quota.json", port)
+    return server
 
 
 def find_agy_binary() -> str:
@@ -578,6 +655,7 @@ def sync_once(client: HomeAssistantClient) -> bool:
     now_iso = datetime.now(timezone.utc).isoformat()
 
     if not payload:
+        _update_quota_snapshot("Offline", now_iso)
         try:
             client.post_state(
                 "sensor.antigravity_quota_status",
@@ -609,6 +687,7 @@ def sync_once(client: HomeAssistantClient) -> bool:
         return False
 
     synced_count = 0
+    json_buckets: dict[str, Any] = {}
     try:
         for group in groups:
             group_name = group.get("name", "")
@@ -665,10 +744,12 @@ def sync_once(client: HomeAssistantClient) -> bool:
                     elapsed_hours = elapsed_seconds / 3600.0
                     hours_to_reset = time_to_reset_seconds / 3600.0
 
-                    # Observation window guard (at least 15 mins or 2% of total window)
-                    min_obs_hours = max(0.25, (window_seconds * 0.02) / 3600.0)
-                    if elapsed_hours >= min_obs_hours and used_pct > 0:
-                        burn_rate_pct_per_h = round(used_pct / elapsed_hours, 2)
+                    # Smooth early-window damping: avoid 0-rate dead zones (e.g. 3.36h on weekly)
+                    # and early-burst spikes by using at least 20% of the window (min 1h) as denominator.
+                    damp_hours = max(1.0, (window_seconds * 0.20) / 3600.0)
+                    if elapsed_seconds > 0 and used_pct > 0:
+                        effective_hours = max(elapsed_hours, damp_hours)
+                        burn_rate_pct_per_h = round(used_pct / effective_hours, 2)
                     else:
                         burn_rate_pct_per_h = 0.0
                 else:
@@ -866,6 +947,20 @@ def sync_once(client: HomeAssistantClient) -> bool:
                 )
                 synced_count += 1
 
+                slug_key = base_id.removeprefix("sensor.antigravity_")
+                json_buckets[slug_key] = {
+                    "label": f"{group_name} ({bucket.get('window', bucket_id)})",
+                    "used": int_used_pct,
+                    "used_exact": used_pct,
+                    "remaining": int_rem_pct,
+                    "projected": round(projected_pct),
+                    "projected_exact": projected_pct,
+                    "resets_in": resets_in,
+                    "runway": runway_str,
+                    "pace": pace_status,
+                    "risk": is_over_quota_risk,
+                }
+
         # Overarching health sensor
         client.post_state(
             "sensor.antigravity_quota_status",
@@ -890,6 +985,8 @@ def sync_once(client: HomeAssistantClient) -> bool:
                 "last_synced": now_iso,
             },
         )
+
+        _update_quota_snapshot("Online", now_iso, json_buckets)
 
     except HomeAssistantUnreachableError as exc:
         _LOGGER.warning("Home Assistant became unreachable during sync (%s). Aborting remaining updates.", exc)
@@ -919,6 +1016,11 @@ def main() -> None:
     parser.add_argument("--ha-url", help="Home Assistant base URL")
     parser.add_argument("--ha-token", help="Home Assistant Long-Lived Access Token")
     parser.add_argument("--interval", type=int, help="Sync interval in seconds (default 60)")
+    parser.add_argument(
+        "--json-port",
+        type=int,
+        help="Port for read-only /quota.json feed (0 to disable, default 8787)",
+    )
     parser.add_argument("--once", action="store_true", help="Run sync once and exit")
     parser.add_argument(
         "--cleanup-ghosts",
@@ -928,9 +1030,11 @@ def main() -> None:
     args = parser.parse_args()
 
     default_url, default_token, default_interval = get_config()
+    default_json_port, json_token = get_json_server_config()
     ha_url = (args.ha_url or default_url).rstrip("/")
     ha_token = args.ha_token or default_token
     interval = args.interval or default_interval
+    json_port = default_json_port if args.json_port is None else args.json_port
 
     if not ha_token:
         _LOGGER.error("Missing HA_TOKEN. Provide via env or .env file.")
@@ -946,6 +1050,13 @@ def main() -> None:
     if args.once:
         success = sync_once(client)
         sys.exit(0 if success else 1)
+
+    json_server: ThreadingHTTPServer | None = None
+    if json_port > 0:
+        try:
+            json_server = start_quota_http_server(json_port, json_token)
+        except OSError as exc:
+            _LOGGER.warning("Could not start KWGT JSON server on port %d: %s", json_port, exc)
 
     sd_notify("READY=1")
     _LOGGER.info(
@@ -980,6 +1091,10 @@ def main() -> None:
         elapsed = time.monotonic() - cycle_start
         sleep_duration = max(1.0, interval - elapsed)
         SHUTDOWN_EVENT.wait(timeout=sleep_duration)
+
+    if json_server is not None:
+        json_server.shutdown()
+        json_server.server_close()
 
     sd_notify("STOPPING=1")
     _LOGGER.info("Antigravity sync daemon stopped cleanly.")

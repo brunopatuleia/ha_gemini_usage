@@ -36,6 +36,8 @@ from __future__ import annotations
 import logging
 from datetime import timedelta
 
+from aiohttp import web
+from homeassistant.components.http import HomeAssistantView
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
@@ -54,6 +56,65 @@ from .coordinator import GeminiUsageCoordinator
 
 
 _LOGGER = logging.getLogger(__name__)
+
+
+class AntigravityQuotaJsonView(HomeAssistantView):
+    """Read-only JSON endpoint for Android KWGT widgets."""
+
+    url = "/api/gemini_usage/quota.json"
+    name = "api:gemini_usage:quota_json"
+    requires_auth = False
+
+    async def get(self, request: web.Request) -> web.Response:
+        """Return current Antigravity quota states as compact JSON."""
+        hass: HomeAssistant = request.app["hass"]
+
+        def _state_val(entity_id: str, default: str = "") -> str:
+            st = hass.states.get(entity_id)
+            return st.state if st is not None else default
+
+        def _num_val(entity_id: str, default: float = 0.0) -> float:
+            try:
+                return float(_state_val(entity_id, str(default)))
+            except (ValueError, TypeError):
+                return default
+
+        status_state = hass.states.get("sensor.antigravity_quota_status")
+        status_val = status_state.state if status_state else "Unknown"
+        last_synced = status_state.attributes.get("last_synced") if status_state else None
+
+        bucket_keys = (
+            "gemini_5h",
+            "gemini_weekly",
+            "gemini_argon_weekly",
+            "claude_gpt_5h",
+            "claude_gpt_weekly",
+        )
+        buckets: dict[str, dict] = {}
+        for key in bucket_keys:
+            used_exact = round(_num_val(f"sensor.antigravity_{key}_used"), 1)
+            proj_exact = round(_num_val(f"sensor.antigravity_{key}_projected"), 1)
+            rem_exact = round(_num_val(f"sensor.antigravity_{key}_remaining"), 1)
+            buckets[key] = {
+                "used": round(used_exact),
+                "used_exact": used_exact,
+                "remaining": round(rem_exact),
+                "projected": round(proj_exact),
+                "projected_exact": proj_exact,
+                "resets_in": _state_val(f"sensor.antigravity_{key}_resets_in", "Unknown"),
+                "runway": _state_val(f"sensor.antigravity_{key}_runway", "Unknown"),
+                "pace": _state_val(f"sensor.antigravity_{key}_pace", "Unknown"),
+                "risk": _state_val(f"binary_sensor.antigravity_{key}_over_quota_risk") == "on",
+            }
+
+        return self.json(
+            {
+                "status": status_val,
+                "last_synced": last_synced,
+                "buckets": buckets,
+            },
+            headers={"Cache-Control": "no-store"},
+        )
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -107,7 +168,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     # Modern HA Core: store coordinator on entry.runtime_data
     entry.runtime_data = coordinator
-    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
+    domain_data = hass.data.setdefault(DOMAIN, {})
+    domain_data[entry.entry_id] = coordinator
+
+    if not domain_data.get("_quota_json_view_registered"):
+        hass.http.register_view(AntigravityQuotaJsonView())
+        domain_data["_quota_json_view_registered"] = True
 
     # Tell HA to set up our sensor platform.  HA calls sensor.async_setup_entry
     # for each platform listed here.
